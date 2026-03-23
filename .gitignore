@@ -1,5 +1,21 @@
+# Python
 .venv/
-.env
 __pycache__/
 *.pyc
+*.pyo
+
+# Environment
+.env
+
+# Node
+node_modules/
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# Local audio paths / downloads
 *.part
+audio/
+downloads/
