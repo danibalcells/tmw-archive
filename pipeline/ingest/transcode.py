@@ -19,6 +19,22 @@ from pathlib import Path
 
 from pipeline.config import PROCESSED_ROOT
 
+
+def get_audio_duration(path: Path) -> float:
+    """Return the duration of an audio file in seconds using ffprobe."""
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return float(result.stdout.strip())
+
 log = logging.getLogger(__name__)
 
 MP3_BITRATE = "320k"

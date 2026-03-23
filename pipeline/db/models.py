@@ -120,10 +120,12 @@ class Recording(Base):
 
 
 class Segment(Base):
-    """30-second window within a recording; the engine of smart features.
+    """20-second window with 50% overlap within a recording; the engine of smart features.
 
     clap_embedding: 512-dim float32 vector stored as raw bytes; None until the
         CLAP pipeline step runs. The FAISS index is a sidecar file, not here.
+    mean_chroma / var_chroma: 12-dim float32 vectors stored as raw bytes (48 bytes each).
+        Populated by the librosa pipeline step alongside the scalar stat columns.
     """
 
     __tablename__ = "segments"
@@ -135,6 +137,12 @@ class Segment(Base):
     start_seconds: Mapped[float] = mapped_column(Float, nullable=False)
     end_seconds: Mapped[float] = mapped_column(Float, nullable=False)
     clap_embedding: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
+    mean_rms: Mapped[Optional[float]] = mapped_column(Float)
+    var_rms: Mapped[Optional[float]] = mapped_column(Float)
+    mean_spectral_centroid: Mapped[Optional[float]] = mapped_column(Float)
+    var_spectral_centroid: Mapped[Optional[float]] = mapped_column(Float)
+    mean_chroma: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
+    var_chroma: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
 
     recording: Mapped["Recording"] = relationship(back_populates="segments")
 

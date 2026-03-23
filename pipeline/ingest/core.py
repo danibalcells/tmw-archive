@@ -24,7 +24,7 @@ from pipeline.db.models import Recording, Session, Song
 from pipeline.db.processing import mark_processed
 from pipeline.db.session import SessionLocal
 from pipeline.ingest.scanner import IngestItem
-from pipeline.ingest.transcode import build_label, transcode_full, transcode_segment
+from pipeline.ingest.transcode import build_label, get_audio_duration, transcode_full, transcode_segment
 from pipeline.ingest.vad import detect_segments
 
 INGEST_VERSION = "1"
@@ -170,6 +170,7 @@ def _ingest_pretrimmed(
         title=item.title,
         source_path=item.source_paths,
         origin="pretrimmed",
+        duration_seconds=round(get_audio_duration(source_abs), 3),
     )
     db.add(rec)
     db.flush()

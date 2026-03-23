@@ -50,6 +50,20 @@ TIER1_SOURCE_PATHS: list[str] = [
     "Old/12%3a12 - 7 Desembre",
 ]
 
+TIER2_SOURCE_PATHS: list[str] = [
+    "Assajos/2016-11-23",
+    "Assajos/2016-12-21",
+    "Assajos/2016-09-29.WAV",
+    "Assajos/2017-03-09.WAV",
+    "Jams/2013-09-12/Jammin-In-The-Name-Of.mp3",
+    "Jams/2015-10-11/Phryjiam.mp3",
+    "Jams/2016-10-05/Gruf Natur.mp3",
+    "Jams/2018-09-16/Liquid.wav",
+    "Temas/Backstage",
+    "Temas/Parabara",
+    "Temas/Rain",
+]
+
 
 @dataclass
 class IngestItem:
@@ -240,12 +254,13 @@ def _scan_old(root: Path) -> list[IngestItem]:
     return items
 
 
-def scan_archive(root: Path, tier1_only: bool = False) -> list[IngestItem]:
+def scan_archive(root: Path, tier1_only: bool = False, tier2_only: bool = False) -> list[IngestItem]:
     """Walk the full archive and return all IngestItems.
 
-    When tier1_only=True, only the paths listed in TIER1_SOURCE_PATHS are
-    returned. The match is prefix-based: a TIER1_SOURCE_PATHS entry that is a
-    directory matches all items whose source_path starts with that prefix.
+    When tier1_only or tier2_only is True, only the paths listed in the
+    corresponding TIER*_SOURCE_PATHS are returned. The match is prefix-based:
+    a paths entry that is a directory matches all items whose source_path starts
+    with that prefix.
     """
     all_items: list[IngestItem] = (
         _scan_assajos(root)
@@ -255,16 +270,19 @@ def scan_archive(root: Path, tier1_only: bool = False) -> list[IngestItem]:
         + _scan_old(root)
     )
 
-    if not tier1_only:
+    if not tier1_only and not tier2_only:
         return all_items
 
-    def _matches_tier1(item: IngestItem) -> bool:
-        for tier1_path in TIER1_SOURCE_PATHS:
+    tier_paths = TIER1_SOURCE_PATHS if tier1_only else TIER2_SOURCE_PATHS
+    tier_label = "Tier 1" if tier1_only else "Tier 2"
+
+    def _matches(item: IngestItem) -> bool:
+        for tier_path in tier_paths:
             for sp in item.source_paths:
-                if sp == tier1_path or sp.startswith(tier1_path.rstrip("/") + "/"):
+                if sp == tier_path or sp.startswith(tier_path.rstrip("/") + "/"):
                     return True
         return False
 
-    filtered = [item for item in all_items if _matches_tier1(item)]
-    log.info("Tier 1 filter: %d / %d items selected", len(filtered), len(all_items))
+    filtered = [item for item in all_items if _matches(item)]
+    log.info("%s filter: %d / %d items selected", tier_label, len(filtered), len(all_items))
     return filtered

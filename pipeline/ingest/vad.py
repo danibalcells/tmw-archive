@@ -11,11 +11,12 @@ point for room-mic band rehearsals.
 
 import logging
 import re
-import subprocess
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from pipeline.ingest.transcode import get_audio_duration
 
 log = logging.getLogger(__name__)
 
@@ -50,15 +51,6 @@ def _vad_defaults(config: dict[str, Any]) -> tuple[float, float, float]:
     )
 
 
-def _get_duration(source: Path) -> float:
-    result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", str(source)],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return float(result.stdout.strip())
 
 
 def detect_segments(
@@ -105,7 +97,7 @@ def detect_segments(
     ]
 
     try:
-        total_duration = _get_duration(source)
+        total_duration = get_audio_duration(source)
     except Exception:
         dm = _DURATION_RE.search(stderr)
         if dm:
