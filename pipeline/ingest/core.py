@@ -15,6 +15,7 @@ in one item does not roll back previously committed items.
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.orm import Session as DBSession
 
@@ -63,9 +64,16 @@ def _existing_recordings(db: DBSession, source_paths: list[str]) -> list[Recordi
 
 def _delete_recordings(db: DBSession, recordings: list[Recording]) -> None:
     for rec in recordings:
+        if rec.audio_path:
+            audio_abs = PROCESSED_ROOT / rec.audio_path
+            if audio_abs.exists():
+                audio_abs.unlink()
+                log.debug("Deleted audio file %s", audio_abs)
+            else:
+                log.debug("Audio file not found on disk (already gone?): %s", audio_abs)
         db.delete(rec)
     db.flush()
-    log.info("Deleted %d existing Recording(s)", len(recordings))
+    log.info("Deleted %d existing Recording(s) (and their audio files)", len(recordings))
 
 
 def _rel_audio_path(abs_path: Path) -> str:
@@ -99,6 +107,7 @@ def ingest_item(
     db: DBSession,
     overwrite: bool = False,
     dry_run: bool = False,
+    ingest_config: dict[str, Any] | None = None,
 ) -> int:
     """Process a single IngestItem. Returns number of Recording rows created."""
     existing = _existing_recordings(db, item.source_paths)
@@ -110,7 +119,7 @@ def ingest_item(
         if not dry_run:
             _delete_recordings(db, existing)
         else:
-            log.info("DRY   would delete %d existing recording(s) for %s", len(existing), item.source_paths)
+            log.info("DRY   would delete %d existing recording(s) and audio files for %s", len(existing), item.source_paths)
 
     session_obj: Session | None = None
     if item.date and not dry_run:
@@ -134,7 +143,7 @@ def ingest_item(
     if item.origin == "pretrimmed":
         return _ingest_pretrimmed(item, db, session_obj, song_obj, dry_run)
     else:
-        return _ingest_raw(item, db, session_obj, song_obj, dry_run)
+        return _ingest_raw(item, db, session_obj, song_obj, dry_run, ingest_config)
 
 
 def _ingest_pretrimmed(
@@ -180,6 +189,7 @@ def _ingest_raw(
     session_obj: Session | None,
     song_obj: Song | None,
     dry_run: bool,
+    ingest_config: dict[str, Any] | None = None,
 ) -> int:
     source_abs = ARCHIVE_ROOT / item.source_paths[0]
 
@@ -191,7 +201,7 @@ def _ingest_raw(
         )
         return 0
 
-    segments = detect_segments(source_abs)
+    segments = detect_segments(source_abs, config=ingest_config)
 
     if not segments:
         log.warning("VAD returned no segments for %s — skipping", item.source_paths[0])
@@ -234,6 +244,7 @@ def run_ingest(
     items: list[IngestItem],
     overwrite: bool = False,
     dry_run: bool = False,
+    ingest_config: dict[str, Any] | None = None,
 ) -> dict[str, int]:
     """Ingest all items. Returns a summary dict."""
     db = SessionLocal()
@@ -244,7 +255,7 @@ def run_ingest(
     try:
         for item in items:
             try:
-                created = ingest_item(item, db, overwrite=overwrite, dry_run=dry_run)
+                created = ingest_item(item, db, overwrite=overwrite, dry_run=dry_run, ingest_config=ingest_config)
                 if created == 0 and not dry_run:
                     total_skipped += 1
                 else:

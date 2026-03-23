@@ -6,21 +6,26 @@ to MP3 320kbps under PROCESSED_ROOT/recordings/{id}.mp3.
 
 Usage:
     python -m pipeline.scripts.ingest [--tier-1] [--overwrite] [--dry-run]
+                                      [--ingest-config PATH]
 
 Flags:
-    --tier-1    Restrict to the Tier 1 dev subset (see docs/tier1.md).
-    --overwrite When a source path already has Recording rows in the DB,
-                delete them (cascading to Segments) and re-ingest.
-                Default: skip already-ingested paths.
-    --dry-run   Log what would happen without writing to DB or disk.
+    --tier-1          Restrict to the Tier 1 dev subset (see docs/tier1.md).
+    --overwrite       When a source path already has Recording rows in the DB,
+                      delete them (cascading to Segments) and re-ingest.
+                      Default: skip already-ingested paths.
+    --dry-run         Log what would happen without writing to DB or disk.
+    --ingest-config   Path to a YAML config file (default: pipeline/ingest.yaml).
+                      Controls VAD thresholds and other ingestion parameters.
 """
 
 import argparse
 import logging
+from pathlib import Path
 
 from pipeline.config import ARCHIVE_ROOT, PROCESSED_ROOT
 from pipeline.ingest.core import run_ingest
 from pipeline.ingest.scanner import scan_archive
+from pipeline.ingest.vad import load_ingest_config
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -38,6 +43,13 @@ def main() -> None:
     parser.add_argument("--overwrite", action="store_true", help="Re-ingest and overwrite existing recordings")
     parser.add_argument("--dry-run", action="store_true", help="Preview without writing to DB or disk")
     parser.add_argument("--verbose", "-v", action="store_true", help="Debug-level logging")
+    parser.add_argument(
+        "--ingest-config",
+        metavar="PATH",
+        type=Path,
+        default=None,
+        help="Path to ingest YAML config (default: pipeline/ingest.yaml)",
+    )
     args = parser.parse_args()
 
     _setup_logging(args.verbose)
@@ -48,10 +60,14 @@ def main() -> None:
     if args.dry_run:
         log.info("DRY RUN — no DB writes or transcoding")
 
+    ingest_config = load_ingest_config(args.ingest_config)
+    if args.ingest_config:
+        log.info("Ingest config:  %s", args.ingest_config)
+
     items = scan_archive(ARCHIVE_ROOT, tier1_only=args.tier_1)
     log.info("Scanned %d item(s) to ingest", len(items))
 
-    summary = run_ingest(items, overwrite=args.overwrite, dry_run=args.dry_run)
+    summary = run_ingest(items, overwrite=args.overwrite, dry_run=args.dry_run, ingest_config=ingest_config)
 
     log.info(
         "Ingest complete — created: %d  skipped: %d  failed: %d",

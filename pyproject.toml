@@ -7,6 +7,7 @@ dependencies = [
     "dropbox>=12.0.2",
     "fastapi>=0.135.2",
     "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.3",
     "sqlalchemy>=2.0.48",
     "uvicorn[standard]>=0.42.0",
 ]

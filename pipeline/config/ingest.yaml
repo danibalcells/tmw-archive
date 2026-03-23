@@ -1,0 +1,13 @@
+vad:
+  # Audio is classified as silence below this level (dBFS).
+  silence_threshold_db: -40.0
+
+  # Silence must last at least this many seconds to trigger a split.
+  # This is the effective threshold: gaps shorter than this are ignored entirely
+  # by FFmpeg and never cause a split.
+  min_silence_duration: 4.0
+
+  # Segments shorter than this are discarded after detection.
+  # 40 s filters out speech and brief noise bursts; raise if useful musical
+  # content is being cut.
+  min_segment_duration: 40.0
