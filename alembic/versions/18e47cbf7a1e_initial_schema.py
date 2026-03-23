@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: 96c25e424a69
+Revision ID: 18e47cbf7a1e
 Revises: 
-Create Date: 2026-03-23 13:44:22.316278
+Create Date: 2026-03-23 14:35:18.111892
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '96c25e424a69'
+revision: str = '18e47cbf7a1e'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -32,77 +32,61 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('title', sa.Text(), nullable=False),
     sa.Column('slug', sa.String(length=128), nullable=False),
+    sa.Column('type', sa.String(length=16), nullable=False),
     sa.Column('cover_of', sa.Text(), nullable=True),
+    sa.CheckConstraint("type IN ('original', 'cover', 'jam')", name='ck_songs_type'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('slug')
     )
     op.create_table('recordings',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('session_id', sa.Integer(), nullable=True),
-    sa.Column('source_paths', sa.JSON(), nullable=False),
-    sa.Column('format', sa.String(length=4), nullable=False),
-    sa.Column('kind', sa.String(length=16), nullable=False),
-    sa.Column('is_primary', sa.Boolean(), nullable=False),
-    sa.Column('duration_seconds', sa.Float(), nullable=True),
-    sa.CheckConstraint("format IN ('mp3', 'wav', 'aif')", name='ck_recordings_format'),
-    sa.CheckConstraint("kind IN ('raw_session', 'pretrimmed')", name='ck_recordings_kind'),
-    sa.ForeignKeyConstraint(['session_id'], ['sessions.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_recordings_session_id'), 'recordings', ['session_id'], unique=False)
-    op.create_table('tracks',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('recording_id', sa.Integer(), nullable=False),
-    sa.Column('session_id', sa.Integer(), nullable=True),
     sa.Column('song_id', sa.Integer(), nullable=True),
     sa.Column('title', sa.Text(), nullable=True),
+    sa.Column('source_path', sa.JSON(), nullable=False),
+    sa.Column('audio_path', sa.Text(), nullable=True),
     sa.Column('start_offset_seconds', sa.Float(), nullable=True),
     sa.Column('end_offset_seconds', sa.Float(), nullable=True),
     sa.Column('duration_seconds', sa.Float(), nullable=True),
-    sa.Column('kind', sa.String(length=16), nullable=False),
-    sa.CheckConstraint("kind IN ('vad_segment', 'pretrimmed', 'live')", name='ck_tracks_kind'),
-    sa.ForeignKeyConstraint(['recording_id'], ['recordings.id'], ),
+    sa.Column('origin', sa.String(length=16), nullable=False),
+    sa.CheckConstraint("origin IN ('pretrimmed', 'vad_segment')", name='ck_recordings_origin'),
     sa.ForeignKeyConstraint(['session_id'], ['sessions.id'], ),
     sa.ForeignKeyConstraint(['song_id'], ['songs.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_tracks_recording_id'), 'tracks', ['recording_id'], unique=False)
-    op.create_index(op.f('ix_tracks_session_id'), 'tracks', ['session_id'], unique=False)
-    op.create_index(op.f('ix_tracks_song_id'), 'tracks', ['song_id'], unique=False)
+    op.create_index(op.f('ix_recordings_session_id'), 'recordings', ['session_id'], unique=False)
+    op.create_index(op.f('ix_recordings_song_id'), 'recordings', ['song_id'], unique=False)
     op.create_table('feature_timeseries',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('track_id', sa.Integer(), nullable=False),
+    sa.Column('recording_id', sa.Integer(), nullable=False),
     sa.Column('feature_name', sa.String(length=64), nullable=False),
     sa.Column('packed_values', sa.LargeBinary(), nullable=False),
-    sa.ForeignKeyConstraint(['track_id'], ['tracks.id'], ),
+    sa.ForeignKeyConstraint(['recording_id'], ['recordings.id'], ),
     sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('track_id', 'feature_name')
+    sa.UniqueConstraint('recording_id', 'feature_name')
     )
-    op.create_index(op.f('ix_feature_timeseries_track_id'), 'feature_timeseries', ['track_id'], unique=False)
+    op.create_index(op.f('ix_feature_timeseries_recording_id'), 'feature_timeseries', ['recording_id'], unique=False)
     op.create_table('segments',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('track_id', sa.Integer(), nullable=False),
+    sa.Column('recording_id', sa.Integer(), nullable=False),
     sa.Column('start_seconds', sa.Float(), nullable=False),
     sa.Column('end_seconds', sa.Float(), nullable=False),
     sa.Column('clap_embedding', sa.LargeBinary(), nullable=True),
-    sa.ForeignKeyConstraint(['track_id'], ['tracks.id'], ),
+    sa.ForeignKeyConstraint(['recording_id'], ['recordings.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_segments_track_id'), 'segments', ['track_id'], unique=False)
+    op.create_index(op.f('ix_segments_recording_id'), 'segments', ['recording_id'], unique=False)
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
-    op.drop_index(op.f('ix_segments_track_id'), table_name='segments')
+    op.drop_index(op.f('ix_segments_recording_id'), table_name='segments')
     op.drop_table('segments')
-    op.drop_index(op.f('ix_feature_timeseries_track_id'), table_name='feature_timeseries')
+    op.drop_index(op.f('ix_feature_timeseries_recording_id'), table_name='feature_timeseries')
     op.drop_table('feature_timeseries')
-    op.drop_index(op.f('ix_tracks_song_id'), table_name='tracks')
-    op.drop_index(op.f('ix_tracks_session_id'), table_name='tracks')
-    op.drop_index(op.f('ix_tracks_recording_id'), table_name='tracks')
-    op.drop_table('tracks')
+    op.drop_index(op.f('ix_recordings_song_id'), table_name='recordings')
     op.drop_index(op.f('ix_recordings_session_id'), table_name='recordings')
     op.drop_table('recordings')
     op.drop_table('songs')

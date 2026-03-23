@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 ARCHIVE_ROOT: Path = Path(os.environ.get("ARCHIVE_ROOT", "~/Music/TMW-Archive")).expanduser()
+PROCESSED_ROOT: Path = Path(os.environ.get("PROCESSED_ROOT", "~/Music/TMW-Archive-Processed")).expanduser()
+PROCESSED_ROOT: Path = Path(os.environ.get("PROCESSED_ROOT", "~/Music/TMW-Archive-Processed")).expanduser()
 
 DATABASE_URL: str = os.environ.get("DATABASE_URL", "sqlite:///data/archive.db")
 
