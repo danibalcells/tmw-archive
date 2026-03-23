@@ -1,8 +1,10 @@
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    DateTime,
     Float,
     ForeignKey,
     Integer,
@@ -112,6 +114,9 @@ class Recording(Base):
     feature_timeseries: Mapped[list["FeatureTimeseries"]] = relationship(
         back_populates="recording", cascade="all, delete-orphan"
     )
+    processing_logs: Mapped[list["ProcessingLog"]] = relationship(
+        back_populates="recording", cascade="all, delete-orphan"
+    )
 
 
 class Segment(Base):
@@ -153,3 +158,43 @@ class FeatureTimeseries(Base):
     packed_values: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
     recording: Mapped["Recording"] = relationship(back_populates="feature_timeseries")
+
+
+class ProcessingLog(Base):
+    """Append-only log of pipeline steps applied to a recording.
+
+    step: which pipeline step ran — one of the checked values below.
+    version: opaque string identifying the step's code version (e.g. "1").
+        Used to re-run steps after logic changes without re-processing already-
+        current recordings.
+    completed_at: UTC timestamp when the step finished (success or failure).
+    status: outcome — 'success', 'failed', or 'skipped'.
+    error_message: populated on 'failed'; None otherwise.
+
+    The table is append-only. Retrying a failed step produces a new row.
+    needs_processing() queries for the absence of any success row.
+    """
+
+    __tablename__ = "processing_log"
+    __table_args__ = (
+        CheckConstraint(
+            "step IN ('ingest', 'librosa', 'clap', 'coverhunter')",
+            name="ck_processing_log_step",
+        ),
+        CheckConstraint(
+            "status IN ('success', 'failed', 'skipped')",
+            name="ck_processing_log_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recording_id: Mapped[int] = mapped_column(
+        ForeignKey("recordings.id"), nullable=False, index=True
+    )
+    step: Mapped[str] = mapped_column(String(32), nullable=False)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+
+    recording: Mapped["Recording"] = relationship(back_populates="processing_logs")

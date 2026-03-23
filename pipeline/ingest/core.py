@@ -20,10 +20,13 @@ from sqlalchemy.orm import Session as DBSession
 
 from pipeline.config import ARCHIVE_ROOT, PROCESSED_ROOT
 from pipeline.db.models import Recording, Session, Song
+from pipeline.db.processing import mark_processed
 from pipeline.db.session import SessionLocal
 from pipeline.ingest.scanner import IngestItem
 from pipeline.ingest.transcode import build_label, transcode_full, transcode_segment
 from pipeline.ingest.vad import detect_segments
+
+INGEST_VERSION = "1"
 
 log = logging.getLogger(__name__)
 
@@ -166,6 +169,7 @@ def _ingest_pretrimmed(
     rec.audio_path = _rel_audio_path(audio_abs)
     db.commit()
 
+    mark_processed(db, rec.id, "ingest", INGEST_VERSION)
     log.info("DONE  pretrimmed %s → Recording id=%d", item.source_paths[0], rec.id)
     return 1
 
@@ -214,6 +218,8 @@ def _ingest_raw(
         )
         rec.audio_path = _rel_audio_path(audio_abs)
         db.commit()
+
+        mark_processed(db, rec.id, "ingest", INGEST_VERSION)
         created += 1
 
     log.info(
