@@ -5,22 +5,25 @@ silence detection on raw session recordings, and transcodes all audio
 to MP3 320kbps under PROCESSED_ROOT/recordings/{id}.mp3.
 
 Usage:
-    python -m pipeline.scripts.ingest [--tier-1 | --tier-2] [--overwrite] [--dry-run]
-                                      [--ingest-config PATH]
+    python -m pipeline.scripts.ingest [--tier N [N ...]] [--overwrite] [--dry-run]
+                                      [--workers N] [--ingest-config PATH]
 
 Flags:
-    --tier-1          Restrict to the Tier 1 dev subset (see docs/tier1.md).
-    --tier-2          Restrict to the Tier 2 dev subset (see docs/tier2.md).
+    --tier N [N ...]  Restrict to one or more dev subsets: 1, 2, or both.
+                      E.g. --tier 1, --tier 2, --tier 1 2.
     --overwrite       When a source path already has Recording rows in the DB,
                       delete them (cascading to Segments) and re-ingest.
                       Default: skip already-ingested paths.
     --dry-run         Log what would happen without writing to DB or disk.
+    --workers / -j    Number of parallel FFmpeg worker processes (default: cpu_count - 1).
+                      Use --workers 1 to run sequentially.
     --ingest-config   Path to a YAML config file (default: pipeline/ingest.yaml).
                       Controls VAD thresholds and other ingestion parameters.
 """
 
 import argparse
 import logging
+import os
 from pathlib import Path
 
 from pipeline.config import ARCHIVE_ROOT, PROCESSED_ROOT
@@ -40,9 +43,15 @@ def _setup_logging(verbose: bool) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    tier_group = parser.add_mutually_exclusive_group()
-    tier_group.add_argument("--tier-1", action="store_true", help="Ingest Tier 1 dev subset only (see docs/tier1.md)")
-    tier_group.add_argument("--tier-2", action="store_true", help="Ingest Tier 2 dev subset only (see docs/tier2.md)")
+    parser.add_argument(
+        "--tier",
+        type=int,
+        nargs="+",
+        choices=[1, 2],
+        metavar="N",
+        default=None,
+        help="Restrict to dev subset(s): --tier 1, --tier 2, or --tier 1 2",
+    )
     parser.add_argument("--overwrite", action="store_true", help="Re-ingest and overwrite existing recordings")
     parser.add_argument("--dry-run", action="store_true", help="Preview without writing to DB or disk")
     parser.add_argument("--verbose", "-v", action="store_true", help="Debug-level logging")
@@ -52,6 +61,13 @@ def main() -> None:
         type=Path,
         default=None,
         help="Path to ingest YAML config (default: pipeline/ingest.yaml)",
+    )
+    parser.add_argument(
+        "--workers",
+        "-j",
+        type=int,
+        default=max(1, (os.cpu_count() or 2) - 1),
+        help="Parallel worker processes for FFmpeg (default: cpu_count - 1). Use 1 for sequential.",
     )
     args = parser.parse_args()
 
@@ -67,10 +83,18 @@ def main() -> None:
     if args.ingest_config:
         log.info("Ingest config:  %s", args.ingest_config)
 
-    items = scan_archive(ARCHIVE_ROOT, tier1_only=args.tier_1, tier2_only=args.tier_2)
+    items = scan_archive(ARCHIVE_ROOT, tiers=args.tier)
     log.info("Scanned %d item(s) to ingest", len(items))
 
-    summary = run_ingest(items, overwrite=args.overwrite, dry_run=args.dry_run, ingest_config=ingest_config)
+    if not args.dry_run:
+        log.info("Workers:        %d", args.workers)
+    summary = run_ingest(
+        items,
+        overwrite=args.overwrite,
+        dry_run=args.dry_run,
+        ingest_config=ingest_config,
+        workers=args.workers,
+    )
 
     log.info(
         "Ingest complete — created: %d  skipped: %d  failed: %d",

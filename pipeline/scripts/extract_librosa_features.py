@@ -12,6 +12,7 @@ Usage:
 Options:
   --workers N       Worker processes (default: cpu_count - 1)
   --recording-id N  Process a single recording by ID
+  --tier N [N ...]  Restrict to dev subset(s): --tier 1, --tier 2, or --tier 1 2
   --dry-run         Print what would be processed without writing to the DB
 """
 
@@ -31,6 +32,7 @@ from pipeline.db.processing import mark_processed, needs_processing
 from pipeline.db.segments import ensure_segments
 from pipeline.db.session import SessionLocal
 from pipeline.features.librosa_features import compute_features, write_features
+from pipeline.ingest.tiers import filter_recording_ids_by_tier, tier_paths_for
 
 LIBROSA_VERSION = "1"
 
@@ -55,6 +57,15 @@ def _parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help="Process a single recording by ID (default: all unprocessed)",
+    )
+    p.add_argument(
+        "--tier",
+        type=int,
+        nargs="+",
+        choices=[1, 2],
+        metavar="N",
+        default=None,
+        help="Restrict to dev subset(s): --tier 1, --tier 2, or --tier 1 2",
     )
     p.add_argument(
         "--dry-run",
@@ -97,6 +108,12 @@ def main() -> None:
             recording_ids = [args.recording_id]
         else:
             recording_ids = needs_processing(db, "librosa", LIBROSA_VERSION)
+
+        if args.tier:
+            tier_paths = tier_paths_for(args.tier)
+            tier_label = "Tier " + "+".join(str(t) for t in sorted(args.tier))
+            recording_ids = filter_recording_ids_by_tier(db, recording_ids, tier_paths)
+            log.info("%s filter: %d recording(s) selected", tier_label, len(recording_ids))
 
         log.info("Recordings to process: %d", len(recording_ids))
         if not recording_ids:

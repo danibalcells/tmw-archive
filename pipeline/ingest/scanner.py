@@ -30,6 +30,7 @@ from pipeline.ingest.dates import (
     parse_old_folder_date,
     parse_temas_date,
 )
+from pipeline.ingest.tiers import matches_tier, tier_paths_for
 
 log = logging.getLogger(__name__)
 
@@ -38,31 +39,6 @@ IGNORED_SUFFIXES: frozenset[str] = frozenset({".hprj", ".mp4", ".pdf", ".txt"})
 
 _FAT32_SPLIT_RE = re.compile(r"_LR-\d{4}\.", re.IGNORECASE)
 _LR_FILE_RE = re.compile(r"_LR\.", re.IGNORECASE)
-
-TIER1_SOURCE_PATHS: list[str] = [
-    "Assajos/2016-01-17.wav",
-    "Assajos/2016-09-22",
-    "Jams/2013-11-16/Same-Rain-New-Villages.mp3",
-    "Temas/Lady-Monas-Experience/Lady-Monas-Experience_2013-11-16.mp3",
-    "Temas/Lady-Monas-Experience/Lady-Monas-Experience_2015-09-25.mp3",
-    "Temas/Lady-Monas-Experience/Lady-Monas-Experience_2015-06-12.WAV-split-12.mp3",
-    "Temas/Lady-Monas-Experience/Lady-Monas-Experience_Demo.mp3",
-    "Old/12%3a12 - 7 Desembre",
-]
-
-TIER2_SOURCE_PATHS: list[str] = [
-    "Assajos/2016-11-23",
-    "Assajos/2016-12-21",
-    "Assajos/2016-09-29.WAV",
-    "Assajos/2017-03-09.WAV",
-    "Jams/2013-09-12/Jammin-In-The-Name-Of.mp3",
-    "Jams/2015-10-11/Phryjiam.mp3",
-    "Jams/2016-10-05/Gruf Natur.mp3",
-    "Jams/2018-09-16/Liquid.wav",
-    "Temas/Backstage",
-    "Temas/Parabara",
-    "Temas/Rain",
-]
 
 
 @dataclass
@@ -254,13 +230,12 @@ def _scan_old(root: Path) -> list[IngestItem]:
     return items
 
 
-def scan_archive(root: Path, tier1_only: bool = False, tier2_only: bool = False) -> list[IngestItem]:
+def scan_archive(root: Path, tiers: list[int] | None = None) -> list[IngestItem]:
     """Walk the full archive and return all IngestItems.
 
-    When tier1_only or tier2_only is True, only the paths listed in the
-    corresponding TIER*_SOURCE_PATHS are returned. The match is prefix-based:
-    a paths entry that is a directory matches all items whose source_path starts
-    with that prefix.
+    Pass tiers=[1], tiers=[2], or tiers=[1, 2] to restrict to one or both dev
+    subsets. The match is prefix-based: a tier path that names a directory
+    matches all items whose source_path starts with that prefix.
     """
     all_items: list[IngestItem] = (
         _scan_assajos(root)
@@ -270,19 +245,12 @@ def scan_archive(root: Path, tier1_only: bool = False, tier2_only: bool = False)
         + _scan_old(root)
     )
 
-    if not tier1_only and not tier2_only:
+    if not tiers:
         return all_items
 
-    tier_paths = TIER1_SOURCE_PATHS if tier1_only else TIER2_SOURCE_PATHS
-    tier_label = "Tier 1" if tier1_only else "Tier 2"
+    tier_paths = tier_paths_for(tiers)
+    tier_label = "Tier " + "+".join(str(t) for t in sorted(tiers))
 
-    def _matches(item: IngestItem) -> bool:
-        for tier_path in tier_paths:
-            for sp in item.source_paths:
-                if sp == tier_path or sp.startswith(tier_path.rstrip("/") + "/"):
-                    return True
-        return False
-
-    filtered = [item for item in all_items if _matches(item)]
+    filtered = [item for item in all_items if matches_tier(item.source_paths, tier_paths)]
     log.info("%s filter: %d / %d items selected", tier_label, len(filtered), len(all_items))
     return filtered

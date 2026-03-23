@@ -11,6 +11,7 @@ point for room-mic band rehearsals.
 
 import logging
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 

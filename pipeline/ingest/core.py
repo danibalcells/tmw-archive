@@ -14,6 +14,8 @@ in one item does not roll back previously committed items.
 """
 
 import logging
+import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -241,31 +243,209 @@ def _ingest_raw(
     return created
 
 
-def run_ingest(
+def _vad_task(task: dict) -> dict:
+    """Worker: run VAD on a raw source file. Returns detected segments."""
+    segments = detect_segments(Path(task["source_abs"]), config=task["config"])
+    return {"segments": segments}
+
+
+def _duration_task(task: dict) -> dict:
+    """Worker: probe duration of a pretrimmed source file."""
+    duration = get_audio_duration(Path(task["source_abs"]))
+    return {"duration": duration}
+
+
+def _transcode_task(task: dict) -> dict:
+    """Worker: transcode a recording (full file or segment). Returns relative audio_path."""
+    source = Path(task["source_abs"])
+    rec_id: int = task["recording_id"]
+    label: str = task["label"]
+    if task["type"] == "full":
+        audio_abs = transcode_full(source, rec_id, label=label)
+    else:
+        audio_abs = transcode_segment(source, rec_id, task["start_sec"], task["end_sec"], label=label)
+    return {"recording_id": rec_id, "audio_path": str(audio_abs.relative_to(PROCESSED_ROOT))}
+
+
+def _run_ingest_parallel(
     items: list[IngestItem],
-    overwrite: bool = False,
-    dry_run: bool = False,
-    ingest_config: dict[str, Any] | None = None,
+    overwrite: bool,
+    ingest_config: dict[str, Any] | None,
+    workers: int,
 ) -> dict[str, int]:
-    """Ingest all items. Returns a summary dict."""
+    """Parallel ingest: VAD/duration in pool → DB creates → transcode in pool → DB updates."""
     db = SessionLocal()
     total_created = 0
     total_skipped = 0
     total_failed = 0
 
     try:
+        eligible: list[IngestItem] = []
         for item in items:
-            try:
-                created = ingest_item(item, db, overwrite=overwrite, dry_run=dry_run, ingest_config=ingest_config)
-                if created == 0 and not dry_run:
+            existing = _existing_recordings(db, item.source_paths)
+            if existing:
+                if not overwrite:
+                    log.info("SKIP  %s (already ingested, %d recording(s))", item.source_paths, len(existing))
                     total_skipped += 1
+                    continue
+                _delete_recordings(db, existing)
+            eligible.append(item)
+
+        if not eligible:
+            return {"created": total_created, "skipped": total_skipped, "failed": total_failed}
+
+        log.info("Phase 1: pre-compute (VAD / duration) for %d item(s) using %d worker(s)", len(eligible), workers)
+
+        vad_results: dict[int, list[tuple[float, float]]] = {}
+        duration_results: dict[int, float] = {}
+        phase1_failed: set[int] = set()
+
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            future_to_idx: dict = {}
+            for idx, item in enumerate(eligible):
+                source_abs = str(ARCHIVE_ROOT / item.source_paths[0])
+                if item.origin == "raw":
+                    future = pool.submit(_vad_task, {"source_abs": source_abs, "config": ingest_config})
                 else:
-                    total_created += created
-            except Exception as exc:
-                log.error("FAIL  %s — %s", item.source_paths, exc)
-                db.rollback()
-                total_failed += 1
+                    future = pool.submit(_duration_task, {"source_abs": source_abs})
+                future_to_idx[future] = idx
+
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                item = eligible[idx]
+                try:
+                    result = future.result()
+                    if item.origin == "raw":
+                        vad_results[idx] = result["segments"]
+                    else:
+                        duration_results[idx] = result["duration"]
+                except Exception as exc:
+                    log.error("FAIL  pre-compute %s — %s", item.source_paths, exc)
+                    phase1_failed.add(idx)
+                    total_failed += 1
+
+        log.info("Phase 2: creating Recording rows")
+
+        transcode_tasks: list[dict] = []
+        for idx, item in enumerate(eligible):
+            if idx in phase1_failed:
+                continue
+
+            source_abs = ARCHIVE_ROOT / item.source_paths[0]
+
+            session_obj: Session | None = None
+            if item.date:
+                session_obj = _get_or_create_session(db, item.date, item.date_uncertain, item.notes)
+
+            song_obj: Song | None = None
+            if item.song_slug and item.song_type:
+                song_obj = _get_or_create_song(db, item.song_slug, item.song_type, item.title or item.song_slug)
+
+            if item.origin == "pretrimmed":
+                duration = duration_results.get(idx, 0.0)
+                rec = Recording(
+                    session_id=session_obj.id if session_obj else None,
+                    song_id=song_obj.id if song_obj else None,
+                    title=item.title,
+                    source_path=item.source_paths,
+                    origin="pretrimmed",
+                    duration_seconds=round(duration, 3),
+                )
+                db.add(rec)
+                db.flush()
+                transcode_tasks.append({
+                    "type": "full",
+                    "source_abs": str(source_abs),
+                    "recording_id": rec.id,
+                    "label": _pretrimmed_label(item),
+                })
+            else:
+                segments = vad_results.get(idx, [])
+                if not segments:
+                    log.warning("VAD returned no segments for %s — skipping", item.source_paths[0])
+                    continue
+                for start_sec, end_sec in segments:
+                    rec = Recording(
+                        session_id=session_obj.id if session_obj else None,
+                        song_id=None,
+                        title=None,
+                        source_path=item.source_paths,
+                        origin="vad_segment",
+                        start_offset_seconds=start_sec,
+                        end_offset_seconds=end_sec,
+                        duration_seconds=round(end_sec - start_sec, 3),
+                    )
+                    db.add(rec)
+                    db.flush()
+                    transcode_tasks.append({
+                        "type": "segment",
+                        "source_abs": str(source_abs),
+                        "recording_id": rec.id,
+                        "start_sec": start_sec,
+                        "end_sec": end_sec,
+                        "label": _vad_label(item.source_paths[0], start_sec, end_sec),
+                    })
+
+        db.commit()
+        log.info("Phase 3: transcoding %d recording(s) using %d worker(s)", len(transcode_tasks), workers)
+
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            future_to_task: dict = {}
+            for task in transcode_tasks:
+                future = pool.submit(_transcode_task, task)
+                future_to_task[future] = task
+
+            for future in as_completed(future_to_task):
+                task = future_to_task[future]
+                rec_id: int = task["recording_id"]
+                try:
+                    result = future.result()
+                    rec = db.get(Recording, rec_id)
+                    rec.audio_path = result["audio_path"]
+                    db.commit()
+                    mark_processed(db, rec_id, "ingest", INGEST_VERSION)
+                    log.info("DONE  recording %d — %s", rec_id, result["audio_path"])
+                    total_created += 1
+                except Exception as exc:
+                    log.error("FAIL  transcode recording %d — %s", rec_id, exc)
+                    db.rollback()
+                    total_failed += 1
+
     finally:
         db.close()
 
     return {"created": total_created, "skipped": total_skipped, "failed": total_failed}
+
+
+def run_ingest(
+    items: list[IngestItem],
+    overwrite: bool = False,
+    dry_run: bool = False,
+    ingest_config: dict[str, Any] | None = None,
+    workers: int = 1,
+) -> dict[str, int]:
+    """Ingest all items. Returns a summary dict."""
+    if dry_run or workers <= 1:
+        db = SessionLocal()
+        total_created = 0
+        total_skipped = 0
+        total_failed = 0
+
+        try:
+            for item in items:
+                try:
+                    created = ingest_item(item, db, overwrite=overwrite, dry_run=dry_run, ingest_config=ingest_config)
+                    if created == 0 and not dry_run:
+                        total_skipped += 1
+                    else:
+                        total_created += created
+                except Exception as exc:
+                    log.error("FAIL  %s — %s", item.source_paths, exc)
+                    db.rollback()
+                    total_failed += 1
+        finally:
+            db.close()
+
+        return {"created": total_created, "skipped": total_skipped, "failed": total_failed}
+
+    return _run_ingest_parallel(items, overwrite=overwrite, ingest_config=ingest_config, workers=workers)
