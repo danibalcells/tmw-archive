@@ -89,8 +89,8 @@ def _recording_out(rec: Recording) -> RecordingOut:
     )
 
 
-@app.get("/api/songs", response_model=list[SongOut])
-def list_songs(db: Session = Depends(get_session)) -> list[SongOut]:
+@app.get("/api/songs", response_model=list[SongDetailOut])
+def list_songs(db: Session = Depends(get_session)) -> list[SongDetailOut]:
     songs = (
         db.query(Song)
         .filter(Song.song_type.in_(["original", "cover"]))
@@ -98,13 +98,13 @@ def list_songs(db: Session = Depends(get_session)) -> list[SongOut]:
         .all()
     )
     return [
-        SongOut(
+        SongDetailOut(
             id=s.id,
             title=s.title,
             slug=s.slug,
             song_type=s.song_type,
             cover_of=s.cover_of,
-            recording_count=len(s.recordings),
+            recordings=[_recording_out(r) for r in s.recordings],
         )
         for s in songs
     ]
