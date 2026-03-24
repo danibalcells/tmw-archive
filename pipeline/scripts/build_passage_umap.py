@@ -6,7 +6,11 @@ represented by the mean UMAP coordinates of its constituent segments (read from 
 existing segment-level UMAP JSON), plus averaged feature values.
 
 Usage:
+  # Single source file
   python -m pipeline.scripts.build_passage_umap SOURCE_UMAP [options]
+
+  # Process every segment UMAP in the segments directory
+  python -m pipeline.scripts.build_passage_umap --each [options]
 
 Arguments:
   SOURCE_UMAP              Path to a segment-level UMAP JSON file (e.g.
@@ -16,8 +20,15 @@ Arguments:
                            (passages)"). Both can be overridden with --name / --label.
 
 Options:
+  --each                   Process every segment UMAP JSON found in --segments-dir.
+                           When used, SOURCE_UMAP must not be given, and --name /
+                           --label are ignored (derived per file as usual).
+  --segments-dir DIR       Directory to scan when using --each
+                           (default: data/umaps/segments).
   --name NAME              Override the output identifier (default: <stem>-passages).
+                           Ignored when --each is used.
   --label LABEL            Override the human-readable label (default: <source label> (passages)).
+                           Ignored when --each is used.
   --cosine-threshold F     Cosine distance threshold to start a new passage (default: 0.3).
                            Lower = more splits, higher = fewer, larger passages.
   --min-segments N         Minimum segments per passage; shorter passages are merged
@@ -31,12 +42,11 @@ Options:
   --output-dir DIR         Output directory (default: data/umaps/recording-passage).
 
 Examples:
-  # All recordings
+  # Single file
   python -m pipeline.scripts.build_passage_umap data/umaps/segments/all.json
 
-  # Songs only, tighter threshold (more passages per recording)
-  python -m pipeline.scripts.build_passage_umap data/umaps/segments/songs.json \\
-    --cosine-threshold 0.2
+  # Every segment UMAP with a tighter threshold
+  python -m pipeline.scripts.build_passage_umap --each --cosine-threshold 0.2
 """
 
 import argparse
@@ -52,6 +62,7 @@ load_dotenv()
 from pipeline.db.models import Recording, Segment, Session as DbSession, Song
 from pipeline.db.session import SessionLocal
 
+DEFAULT_SEGMENTS_DIR = Path("data/umaps/segments")
 DEFAULT_OUTPUT_DIR = Path("data/umaps/recording-passage")
 SONG_TYPE_CHOICES = ["original", "cover", "jam", "unidentified"]
 ORIGIN_CHOICES = ["pretrimmed", "vad_segment"]
@@ -72,12 +83,25 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "source_umap",
         type=Path,
-        help="Path to a segment-level UMAP JSON file (e.g. data/umaps/segments/all.json)",
+        nargs="?",
+        help="Path to a segment-level UMAP JSON file (e.g. data/umaps/segments/all.json). "
+             "Omit when using --each.",
+    )
+    p.add_argument(
+        "--each",
+        action="store_true",
+        help="Process every segment UMAP JSON found in --segments-dir.",
+    )
+    p.add_argument(
+        "--segments-dir",
+        type=Path,
+        default=DEFAULT_SEGMENTS_DIR,
+        help=f"Directory to scan when using --each (default: {DEFAULT_SEGMENTS_DIR})",
     )
     p.add_argument("--name", default=None,
-                   help="Override output identifier (default: <stem>-passages)")
+                   help="Override output identifier (default: <stem>-passages). Ignored with --each.")
     p.add_argument("--label", default=None,
-                   help="Override human-readable label (default: <source label> (passages))")
+                   help="Override human-readable label (default: <source label> (passages)). Ignored with --each.")
     p.add_argument("--cosine-threshold", type=float, default=0.3,
                    help="Cosine distance threshold to split passages (default: 0.3)")
     p.add_argument("--min-segments", type=int, default=3,
@@ -205,39 +229,13 @@ def _update_index(output_dir: Path, name: str, label: str, count: int, filters: 
     log.info("Index updated: %s", index_path)
 
 
-def main() -> None:
-    args = _parse_args()
-
-    source_path: Path = args.source_umap
-    if not source_path.exists():
-        log.error("Source UMAP not found: %s — run build_segment_umap.py first.", source_path)
-        return
-
-    name = args.name or f"{source_path.stem}-passages"
-    source_label = _resolve_source_label(source_path)
-    label = args.label or (f"{source_label} (passages)" if source_label else name)
-
-    log.info("Loading source UMAP coordinates from %s…", source_path)
-    source_points = json.loads(source_path.read_text())
-    coord_map: dict[int, tuple[float, float]] = {
-        p["segment_id"]: (p["x"], p["y"]) for p in source_points
-    }
-    log.info("Loaded %d segment coordinates", len(coord_map))
-
-    include_song_types: set[str | None] | None = None
-    if args.include_song_type:
-        include_song_types = {
-            None if t == "unidentified" else t for t in args.include_song_type
-        }
-
-    include_origins: set[str] | None = None
-    if args.include_origin:
-        include_origins = set(args.include_origin)
-
+def _load_rows(db_rows_cache: list | None) -> list:
+    """Load all segments with CLAP embeddings from the DB (cached across calls)."""
+    if db_rows_cache is not None:
+        return db_rows_cache
     db = SessionLocal()
     try:
-        log.info("Loading segments with CLAP embeddings from DB…")
-        rows = (
+        return (
             db.query(
                 Segment.id,
                 Segment.recording_id,
@@ -262,27 +260,47 @@ def main() -> None:
     finally:
         db.close()
 
-    if not rows:
-        log.error("No segments with CLAP embeddings found — run extract_clap_embeddings.py first.")
-        return
 
-    log.info("Loaded %d segments before filtering", len(rows))
+def _build_one(
+    source_path: Path,
+    name: str,
+    label: str,
+    rows: list,
+    args: argparse.Namespace,
+) -> bool:
+    """Build a single passage UMAP from one source file. Returns True on success."""
+    log.info("── %s → %s (%s) ──", source_path.name, name, label)
 
+    log.info("Loading source UMAP coordinates from %s…", source_path)
+    source_points = json.loads(source_path.read_text())
+    coord_map: dict[int, tuple[float, float]] = {
+        p["segment_id"]: (p["x"], p["y"]) for p in source_points
+    }
+    log.info("Loaded %d segment coordinates", len(coord_map))
+
+    include_song_types: set[str | None] | None = None
+    if args.include_song_type:
+        include_song_types = {
+            None if t == "unidentified" else t for t in args.include_song_type
+        }
+
+    include_origins: set[str] | None = None
+    if args.include_origin:
+        include_origins = set(args.include_origin)
+
+    filtered = rows
     if include_song_types is not None:
-        rows = [r for r in rows if r.song_type in include_song_types]
-        log.info("After song-type filter (%s): %d segments", args.include_song_type, len(rows))
-
+        filtered = [r for r in filtered if r.song_type in include_song_types]
     if include_origins is not None:
-        rows = [r for r in rows if r.origin in include_origins]
-        log.info("After origin filter (%s): %d segments", args.include_origin, len(rows))
+        filtered = [r for r in filtered if r.origin in include_origins]
 
-    if not rows:
-        log.error("No segments remain after filtering.")
-        return
+    if not filtered:
+        log.error("No segments remain after filtering — skipping %s.", name)
+        return False
 
     by_recording: dict[int, list] = {}
     recording_meta: dict[int, dict] = {}
-    for r in rows:
+    for r in filtered:
         by_recording.setdefault(r.recording_id, []).append(r)
         if r.recording_id not in recording_meta:
             recording_meta[r.recording_id] = {
@@ -314,8 +332,7 @@ def main() -> None:
         meta = recording_meta[recording_id]
 
         for group in groups:
-            seg_ids = [s.id for s in group]
-            coords = [coord_map[sid] for sid in seg_ids if sid in coord_map]
+            coords = [coord_map[s.id] for s in group if s.id in coord_map]
             if not coords:
                 no_coords_count += 1
                 continue
@@ -378,6 +395,56 @@ def main() -> None:
         "max_segments": args.max_segments,
     }
     _update_index(args.output_dir, name, label, len(passages), filters)
+    return True
+
+
+def main() -> None:
+    args = _parse_args()
+
+    if args.each and args.source_umap:
+        log.error("Provide either a SOURCE_UMAP path or --each, not both.")
+        return
+    if not args.each and not args.source_umap:
+        log.error("Provide a SOURCE_UMAP path, or use --each to process the whole segments directory.")
+        return
+
+    if args.each:
+        source_files = sorted(
+            p for p in args.segments_dir.glob("*.json") if p.stem != "index"
+        )
+        if not source_files:
+            log.error("No segment UMAP JSON files found in %s.", args.segments_dir)
+            return
+        log.info("Found %d segment UMAPs to process: %s",
+                 len(source_files), [p.name for p in source_files])
+        if args.name or args.label:
+            log.warning("--name and --label are ignored when using --each.")
+    else:
+        source_files = [args.source_umap]
+
+    # Load DB rows once and reuse across all source files
+    log.info("Loading segments with CLAP embeddings from DB…")
+    rows = _load_rows(None)
+    if not rows:
+        log.error("No segments with CLAP embeddings found — run extract_clap_embeddings.py first.")
+        return
+    log.info("Loaded %d segments", len(rows))
+
+    for source_path in source_files:
+        if not source_path.exists():
+            log.error("Source UMAP not found: %s — skipping.", source_path)
+            continue
+
+        name = args.name or f"{source_path.stem}-passages"
+        source_label = _resolve_source_label(source_path)
+        label = args.label or (f"{source_label} (passages)" if source_label else name)
+
+        # In --each mode, always derive name/label from the source file
+        if args.each:
+            name = f"{source_path.stem}-passages"
+            label = f"{source_label} (passages)" if source_label else name
+
+        _build_one(source_path, name, label, rows, args)
 
 
 if __name__ == "__main__":
