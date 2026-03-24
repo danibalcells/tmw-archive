@@ -91,6 +91,41 @@ export function audioUrl(recordingId: number): string {
   return `/api/audio/${recordingId}`;
 }
 
+export interface MoodMapPoint {
+  segment_id: number;
+  recording_id: number;
+  x: number;
+  y: number;
+  start_seconds: number;
+  end_seconds: number;
+  recording_title: string | null;
+  audio_path: string | null;
+  origin: string;
+  session_date: string | null;
+  song_title: string | null;
+  song_type: string | null;
+  mean_rms: number | null;
+  mean_spectral_centroid: number | null;
+}
+
+export interface MoodMapMeta {
+  name: string;
+  label: string;
+  count: number;
+  filters: {
+    include_song_type: string[] | null;
+    include_origin: string[] | null;
+  };
+}
+
+export async function fetchMoodMapList(): Promise<MoodMapMeta[]> {
+  return apiFetch<MoodMapMeta[]>("/api/mood-map", []);
+}
+
+export async function fetchMoodMap(name: string): Promise<MoodMapPoint[]> {
+  return apiFetch<MoodMapPoint[]>(`/api/mood-map/${name}`, []);
+}
+
 export function formatDuration(seconds: number | null): string {
   if (seconds === null) return "—";
   const m = Math.floor(seconds / 60);

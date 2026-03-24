@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -8,6 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from pipeline.config import PROCESSED_ROOT
+
+MOOD_MAP_DIR = Path("data/umaps")
 from pipeline.db.models import Recording, Segment, Session as DbSession, Song
 from pipeline.db.session import get_session
 from pipeline.features.clap_embeddings import unpack_embedding
@@ -252,6 +255,27 @@ def get_similar_segments(
             break
 
     return results
+
+
+@app.get("/api/mood-map")
+def list_mood_maps():
+    index_path = MOOD_MAP_DIR / "index.json"
+    if not index_path.exists():
+        raise HTTPException(
+            status_code=503,
+            detail="No mood maps available — run build_segment_umap.py first.",
+        )
+    return json.loads(index_path.read_text())
+
+
+@app.get("/api/mood-map/{name}")
+def get_mood_map(name: str) -> FileResponse:
+    if not name.replace("-", "").replace("_", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid UMAP name.")
+    path = MOOD_MAP_DIR / f"{name}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"UMAP '{name}' not found.")
+    return FileResponse(str(path), media_type="application/json")
 
 
 @app.get("/api/audio/{recording_id}")

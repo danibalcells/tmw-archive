@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "./index.css";
 import { Layout } from "./components/Layout";
 import { Jams } from "./pages/Jams";
+import { MoodMap } from "./pages/MoodMap";
 import { Sessions } from "./pages/Sessions";
 import { Songs } from "./pages/Songs";
 
@@ -16,6 +17,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="songs" element={<Songs />} />
           <Route path="jams" element={<Jams />} />
           <Route path="sessions" element={<Sessions />} />
+          <Route path="mood-map" element={<MoodMap />} />
         </Route>
       </Routes>
     </BrowserRouter>
