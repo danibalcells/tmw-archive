@@ -71,6 +71,7 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   const hoveredRecordingIdRef = useRef<number | null>(null);
+  const selectedRecordingIdRef = useRef<number | null>(null);
 
   const { play, current: playingSegment } = usePlayer();
 
@@ -254,7 +255,7 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
     ctx.translate(t.x, t.y);
     ctx.scale(t.k, t.k);
 
-    const hoveredRecordingId = hoveredRecordingIdRef.current;
+    const hoveredRecordingId = selectedRecordingIdRef.current ?? hoveredRecordingIdRef.current;
     const groups = recordingGroupsRef.current;
     const songColorMap = songColorMapRef.current;
     const isHovering = hoveredRecordingId !== null;
@@ -429,7 +430,7 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
     const newRecordingId = p?.recording_id ?? null;
     if (hoveredRecordingIdRef.current !== newRecordingId) {
       hoveredRecordingIdRef.current = newRecordingId;
-      draw();
+      if (selectedRecordingIdRef.current === null) draw();
     }
   }, [hitTest, draw]);
 
@@ -437,14 +438,23 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
     setHovered(null);
     if (hoveredRecordingIdRef.current !== null) {
       hoveredRecordingIdRef.current = null;
-      draw();
+      if (selectedRecordingIdRef.current === null) draw();
     }
   }, [draw]);
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current!.getBoundingClientRect();
     const p = hitTest(e.clientX - rect.left, e.clientY - rect.top);
-    if (!p || !p.audio_path) return;
+    if (!p) {
+      if (selectedRecordingIdRef.current !== null) {
+        selectedRecordingIdRef.current = null;
+        draw();
+      }
+      return;
+    }
+    selectedRecordingIdRef.current = p.recording_id;
+    draw();
+    if (!p.audio_path) return;
     play({
       segment_id: p.passage_id ?? p.segment_id ?? -1,
       recording_id: p.recording_id,
@@ -454,7 +464,7 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
       session_date: p.session_date,
       song_title: p.song_title,
     });
-  }, [hitTest, play]);
+  }, [hitTest, play, draw]);
 
   const toggleCategory = useCallback((key: CategoryKey) => {
     setHiddenCategories((prev) => {
