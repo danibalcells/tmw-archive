@@ -47,6 +47,7 @@ chroma: n_seconds × 12 float32 values packed row-major; reshape to
 import numpy as np
 import librosa
 import soundfile as sf
+from scipy.signal import butter, sosfilt, sosfilt_zi
 from sqlalchemy.orm import Session as DBSession
 
 from pipeline.db.models import FeatureTimeseries, Recording, Segment
@@ -54,6 +55,11 @@ from pipeline.db.models import FeatureTimeseries, Recording, Segment
 SR = 22050
 HOP_LENGTH = 512
 CHUNK_SECONDS = 60
+
+_HP_CUTOFF_HZ = 80.0
+_HP_ORDER = 4
+_NORM_PERCENTILE = 99.5
+_NORM_TARGET_PEAK = 0.95
 
 
 def _pack_f32(arr: np.ndarray) -> bytes:
@@ -88,6 +94,27 @@ def _bin_chroma_to_seconds(
     return out
 
 
+def _compute_norm_gain(audio_abs: str) -> float:
+    """First pass over the file to compute a robust per-recording normalization gain.
+
+    Reads the file in 10-second blocks at native sample rate, downsamples the
+    absolute-value signal 10x for memory efficiency, then computes the global
+    99.5th-percentile peak across all samples. Transients (mic grabs, setup
+    bumps) occupy far less than 0.5% of a typical recording, so they don't
+    influence the normalization target.
+    """
+    abs_samples: list[np.ndarray] = []
+    with sf.SoundFile(audio_abs) as f:
+        blocksize = f.samplerate * 10
+        for block in f.blocks(blocksize=blocksize, dtype="float32", always_2d=True):
+            y = block.mean(axis=1)
+            abs_samples.append(np.abs(y[::10]))
+    if not abs_samples:
+        return 1.0
+    peak = float(np.percentile(np.concatenate(abs_samples), _NORM_PERCENTILE))
+    return (_NORM_TARGET_PEAK / peak) if peak > 1e-8 else 1.0
+
+
 def compute_features(task: dict) -> dict:
     """Extract librosa features from an audio file. No DB access — subprocess-safe.
 
@@ -98,9 +125,14 @@ def compute_features(task: dict) -> dict:
     audio_abs: str = task["audio_abs"]
     segments: list[tuple[int, float, float]] = task["segments"]
 
+    norm_gain = _compute_norm_gain(audio_abs)
+
     rms_chunks: list[np.ndarray] = []
     sc_chunks: list[np.ndarray] = []
     chroma_chunks: list[np.ndarray] = []
+
+    hp_sos: np.ndarray | None = None
+    hp_zi: np.ndarray | None = None
 
     with sf.SoundFile(audio_abs) as f:
         native_sr = f.samplerate
@@ -108,6 +140,14 @@ def compute_features(task: dict) -> dict:
 
         for block in f.blocks(blocksize=blocksize, dtype="float32", always_2d=True):
             y_chunk = block.mean(axis=1)
+
+            y_chunk = np.clip(y_chunk * norm_gain, -1.0, 1.0)
+
+            if hp_sos is None:
+                hp_sos = butter(_HP_ORDER, _HP_CUTOFF_HZ / (native_sr / 2.0), btype="high", output="sos")
+                hp_zi = sosfilt_zi(hp_sos) * y_chunk[0]
+            y_chunk, hp_zi = sosfilt(hp_sos, y_chunk, zi=hp_zi)
+
             if native_sr != SR:
                 y_chunk = librosa.resample(y_chunk, orig_sr=native_sr, target_sr=SR)
 

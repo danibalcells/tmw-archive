@@ -40,6 +40,7 @@ import struct
 
 import numpy as np
 import librosa
+from scipy.signal import butter, sosfilt
 from sqlalchemy.orm import Session as DBSession
 
 from pipeline.db.models import Segment
@@ -47,6 +48,11 @@ from pipeline.db.models import Segment
 CLAP_SR = 48_000
 EMBEDDING_DIM = 512
 SEGMENT_SAMPLES = int(20 * CLAP_SR)
+
+_HP_CUTOFF_HZ = 80.0
+_HP_ORDER = 4
+_NORM_PERCENTILE = 99.5
+_NORM_TARGET_PEAK = 0.95
 
 
 def load_model(device: str = "cpu"):
@@ -95,14 +101,32 @@ def load_model(device: str = "cpu"):
     return model
 
 
-def _load_audio(audio_abs: str) -> np.ndarray:
-    """Load audio file as mono float32 at CLAP_SR.
+def _condition_audio(y: np.ndarray, sr: int) -> np.ndarray:
+    """Normalize recording gain and remove sub-bass rumble.
 
-    Uses librosa which handles MP3 reliably and resamples in one pass.
-    Returns a 1-D float32 array of length n_samples.
+    Normalizes the whole recording to a consistent peak level using the
+    99.5th percentile of |amplitude| as the reference — this makes the
+    normalization robust to brief transients (setup handling, mic bumps)
+    at the start of recordings without letting them skew the gain.
+    Any samples that exceed the target after normalization are hard-clipped.
+
+    A high-pass filter at 80 Hz removes sub-bass room modes and floor
+    vibrations, which carry no musical information but do vary across
+    recording locations.
     """
+    peak = np.percentile(np.abs(y), _NORM_PERCENTILE)
+    if peak > 1e-8:
+        y = np.clip(y * (_NORM_TARGET_PEAK / peak), -1.0, 1.0)
+
+    sos = butter(_HP_ORDER, _HP_CUTOFF_HZ / (sr / 2.0), btype="high", output="sos")
+    return sosfilt(sos, y).astype(np.float32)
+
+
+def _load_audio(audio_abs: str) -> np.ndarray:
+    """Load audio file as mono float32 at CLAP_SR, with gain normalization and
+    high-pass filtering applied to the whole recording before segment slicing."""
     y, _ = librosa.load(audio_abs, sr=CLAP_SR, mono=True)
-    return y.astype(np.float32)
+    return _condition_audio(y, CLAP_SR)
 
 
 def _slice_window(audio: np.ndarray, start_sec: float, end_sec: float) -> np.ndarray:
