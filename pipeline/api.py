@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 
 from pipeline.config import PROCESSED_ROOT
 
-MOOD_MAP_DIR = Path("data/umaps")
+MOOD_MAP_BASE_DIR = Path("data/umaps")
+MOOD_MAP_KINDS = {"segments", "recording-passage"}
 from pipeline.db.models import Recording, Segment, Session as DbSession, Song
 from pipeline.db.session import get_session
 from pipeline.features.clap_embeddings import unpack_embedding
@@ -257,24 +258,31 @@ def get_similar_segments(
     return results
 
 
-@app.get("/api/mood-map")
-def list_mood_maps():
-    index_path = MOOD_MAP_DIR / "index.json"
+@app.get("/api/mood-map/{kind}")
+def list_mood_maps(kind: str):
+    if kind not in MOOD_MAP_KINDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown kind '{kind}'. Valid kinds: {sorted(MOOD_MAP_KINDS)}",
+        )
+    index_path = MOOD_MAP_BASE_DIR / kind / "index.json"
     if not index_path.exists():
         raise HTTPException(
             status_code=503,
-            detail="No mood maps available — run build_segment_umap.py first.",
+            detail=f"No mood maps available for kind '{kind}' — run the appropriate build script first.",
         )
     return json.loads(index_path.read_text())
 
 
-@app.get("/api/mood-map/{name}")
-def get_mood_map(name: str) -> FileResponse:
+@app.get("/api/mood-map/{kind}/{name}")
+def get_mood_map(kind: str, name: str) -> FileResponse:
+    if kind not in MOOD_MAP_KINDS:
+        raise HTTPException(status_code=400, detail=f"Unknown kind '{kind}'.")
     if not name.replace("-", "").replace("_", "").isalnum():
         raise HTTPException(status_code=400, detail="Invalid UMAP name.")
-    path = MOOD_MAP_DIR / f"{name}.json"
+    path = MOOD_MAP_BASE_DIR / kind / f"{name}.json"
     if not path.exists():
-        raise HTTPException(status_code=404, detail=f"UMAP '{name}' not found.")
+        raise HTTPException(status_code=404, detail=f"UMAP '{name}' not found for kind '{kind}'.")
     return FileResponse(str(path), media_type="application/json")
 
 

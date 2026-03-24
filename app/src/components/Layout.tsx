@@ -6,7 +6,8 @@ const NAV = [
   { to: "/songs", label: "Songs" },
   { to: "/jams", label: "Jams" },
   { to: "/sessions", label: "Sessions" },
-  { to: "/mood-map", label: "Mood Map" },
+  { to: "/mood-map/segments", label: "Segment Map" },
+  { to: "/mood-map/passages", label: "Passage Map" },
 ];
 
 export function Layout() {

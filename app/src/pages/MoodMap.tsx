@@ -7,6 +7,8 @@ import { fetchMoodMap, fetchMoodMapList } from "../lib/api";
 import type { MoodMapPoint, MoodMapMeta } from "../lib/api";
 import { usePlayer } from "../lib/player";
 
+type MoodMapKind = "segments" | "recording-passage";
+
 type ColorMode = "energy" | "brightness" | "year" | "type" | "song";
 
 // 20-color categorical palette for songs (Tableau 20-ish, hand-tuned for dark bg)
@@ -33,6 +35,8 @@ const CATEGORY_COLOR: Record<string, string> = Object.fromEntries(
 
 const POINT_RADIUS = 2.5;
 const HOVER_THRESHOLD = 5;
+const PASSAGE_RADIUS_MIN = 2;
+const PASSAGE_RADIUS_MAX = 10;
 
 function getCategory(p: MoodMapPoint): CategoryKey {
   return (p.song_type as CategoryKey) ?? "unidentified";
@@ -49,7 +53,7 @@ function formatTime(s: number) {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
-export function MoodMap() {
+export function MoodMap({ kind }: { kind: MoodMapKind }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -74,9 +78,11 @@ export function MoodMap() {
   const colorModeRef = useRef<ColorMode>(colorMode);
   const hiddenCategoriesRef = useRef<Set<CategoryKey>>(hiddenCategories);
   const showRecordingLinesRef = useRef(showRecordingLines);
+  const kindRef = useRef<MoodMapKind>(kind);
   colorModeRef.current = colorMode;
   hiddenCategoriesRef.current = hiddenCategories;
   showRecordingLinesRef.current = showRecordingLines;
+  kindRef.current = kind;
   pointsRef.current = points;
 
   // Precomputed structures rebuilt whenever points change
@@ -93,6 +99,8 @@ export function MoodMap() {
     centroid: d3Scale.ScaleSequential<string>;
     year: d3Scale.ScaleSequential<string>;
   } | null>(null);
+
+  const durationScaleRef = useRef<d3Scale.ScalePower<number, number> | null>(null);
 
   // Rebuild recording groups and song color map whenever points change
   useEffect(() => {
@@ -118,20 +126,27 @@ export function MoodMap() {
     songColorMapRef.current = colorMap;
   }, [points]);
 
-  // Fetch the list of available UMAPs on mount
+  // Fetch the list of available UMAPs on mount (or when kind changes)
   useEffect(() => {
-    fetchMoodMapList()
+    setMapList([]);
+    setSelectedMap(null);
+    setPoints([]);
+    setError(null);
+    setLoading(true);
+    fetchMoodMapList(kind)
       .then((list) => {
         setMapList(list);
         if (list.length > 0) setSelectedMap(list[0].name);
-        else setError("No mood maps available — run build_segment_umap.py first.");
+        else setError(
+          kind === "segments"
+            ? "No segment maps available — run build_segment_umap.py first."
+            : "No passage maps available — run build_passage_umap.py first."
+        );
       })
       .catch(() => setError("Failed to load mood map list."))
-      .finally(() => {
-        if (mapList.length === 0) setLoading(false);
-      });
+      .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [kind]);
 
   // Fetch points when selectedMap changes
   useEffect(() => {
@@ -139,14 +154,14 @@ export function MoodMap() {
     setLoading(true);
     setPoints([]);
     setError(null);
-    fetchMoodMap(selectedMap)
+    fetchMoodMap(kind, selectedMap)
       .then((data) => {
         if (data.length === 0) setError(`No data in "${selectedMap}".`);
         else setPoints(data);
       })
       .catch(() => setError("Failed to load mood map data."))
       .finally(() => setLoading(false));
-  }, [selectedMap]);
+  }, [kind, selectedMap]);
 
   const buildScales = useCallback((width: number, height: number, pts: MoodMapPoint[]) => {
     const xs = pts.map((p) => p.x);
@@ -178,6 +193,20 @@ export function MoodMap() {
       year: d3Scale.scaleSequential(interpolatePlasma)
         .domain([Math.min(...years), Math.max(...years)]),
     };
+
+    const durations = pts.map((p) => p.duration ?? 0).filter((d) => d > 0);
+    if (durations.length > 0) {
+      durations.sort((a, b) => a - b);
+      const p10 = durations[Math.floor(durations.length * 0.1)];
+      const p90 = durations[Math.floor(durations.length * 0.9)];
+      durationScaleRef.current = d3Scale.scalePow()
+        .exponent(0.5)
+        .domain([p10, p90])
+        .range([PASSAGE_RADIUS_MIN, PASSAGE_RADIUS_MAX])
+        .clamp(true);
+    } else {
+      durationScaleRef.current = null;
+    }
   }, []);
 
   const getSongColor = useCallback((songTitle: string | null): string => {
@@ -247,12 +276,18 @@ export function MoodMap() {
       ctx.globalAlpha = 1;
     }
 
+    const isPassage = kindRef.current === "recording-passage";
+    const durScale = durationScaleRef.current;
+
     for (const p of pts) {
       if (hidden.has(getCategory(p))) continue;
       const cx = scales.sx(p.x);
       const cy = scales.sy(p.y);
+      const r = isPassage && durScale && p.duration != null
+        ? durScale(p.duration) / t.k
+        : POINT_RADIUS / t.k;
       ctx.beginPath();
-      ctx.arc(cx, cy, POINT_RADIUS / t.k, 0, Math.PI * 2);
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fillStyle = getColor(p, mode);
       ctx.fill();
     }
@@ -341,7 +376,7 @@ export function MoodMap() {
     const p = hitTest(e.clientX - rect.left, e.clientY - rect.top);
     if (!p || !p.audio_path) return;
     play({
-      segment_id: p.segment_id,
+      segment_id: p.passage_id ?? p.segment_id ?? -1,
       recording_id: p.recording_id,
       start_seconds: p.start_seconds,
       end_seconds: p.end_seconds,
@@ -497,12 +532,17 @@ export function MoodMap() {
           <div className="text-zinc-500 mt-1">
             {formatTime(hovered.start_seconds)} – {formatTime(hovered.end_seconds)}
           </div>
+          {hovered.duration != null && (
+            <div className="text-zinc-500">
+              {Math.round(hovered.duration)}s passage · {hovered.segment_count} segments
+            </div>
+          )}
           {hovered.mean_rms !== null && (
             <div className="text-zinc-500">
               Energy {hovered.mean_rms.toFixed(4)} · Brightness {hovered.mean_spectral_centroid?.toFixed(0)}
             </div>
           )}
-          {playingSegment?.segment_id === hovered.segment_id && (
+          {playingSegment?.segment_id === (hovered.passage_id ?? hovered.segment_id) && (
             <div className="text-green-400 mt-1">▶ playing</div>
           )}
         </div>

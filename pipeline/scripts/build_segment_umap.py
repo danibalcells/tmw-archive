@@ -17,7 +17,7 @@ Options:
   --include-origin ...     Only include segments from recordings with these
                            origins. Choices: pretrimmed vad_segment.
                            (default: all origins)
-  --output-dir DIR         Directory to write JSON files (default: data/umaps).
+  --output-dir DIR         Directory to write JSON files (default: data/umaps/segments).
   --n-neighbors N          UMAP n_neighbors param (default: 15).
   --min-dist F             UMAP min_dist param (default: 0.1).
 
@@ -53,7 +53,7 @@ load_dotenv()
 from pipeline.db.models import Recording, Segment, Session as DbSession, Song
 from pipeline.db.session import SessionLocal
 
-DEFAULT_OUTPUT_DIR = Path("data/umaps")
+DEFAULT_OUTPUT_DIR = Path("data/umaps/segments")
 SONG_TYPE_CHOICES = ["original", "cover", "jam", "unidentified"]
 ORIGIN_CHOICES = ["pretrimmed", "vad_segment"]
 

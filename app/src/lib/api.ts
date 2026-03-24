@@ -92,7 +92,13 @@ export function audioUrl(recordingId: number): string {
 }
 
 export interface MoodMapPoint {
-  segment_id: number;
+  // segment view
+  segment_id?: number;
+  // passage view
+  passage_id?: number;
+  duration?: number;
+  segment_count?: number;
+  // common
   recording_id: number;
   x: number;
   y: number;
@@ -118,12 +124,12 @@ export interface MoodMapMeta {
   };
 }
 
-export async function fetchMoodMapList(): Promise<MoodMapMeta[]> {
-  return apiFetch<MoodMapMeta[]>("/api/mood-map", []);
+export async function fetchMoodMapList(kind: string): Promise<MoodMapMeta[]> {
+  return apiFetch<MoodMapMeta[]>(`/api/mood-map/${kind}`, []);
 }
 
-export async function fetchMoodMap(name: string): Promise<MoodMapPoint[]> {
-  return apiFetch<MoodMapPoint[]>(`/api/mood-map/${name}`, []);
+export async function fetchMoodMap(kind: string, name: string): Promise<MoodMapPoint[]> {
+  return apiFetch<MoodMapPoint[]>(`/api/mood-map/${kind}/${name}`, []);
 }
 
 export function formatDuration(seconds: number | null): string {

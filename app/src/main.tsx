@@ -17,7 +17,11 @@ createRoot(document.getElementById("root")!).render(
           <Route path="songs" element={<Songs />} />
           <Route path="jams" element={<Jams />} />
           <Route path="sessions" element={<Sessions />} />
-          <Route path="mood-map" element={<MoodMap />} />
+          <Route path="mood-map">
+            <Route index element={<Navigate to="segments" replace />} />
+            <Route path="segments" element={<MoodMap kind="segments" />} />
+            <Route path="passages" element={<MoodMap kind="recording-passage" />} />
+          </Route>
         </Route>
       </Routes>
     </BrowserRouter>
