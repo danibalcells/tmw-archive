@@ -70,6 +70,8 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
   const [hovered, setHovered] = useState<MoodMapPoint | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
+  const hoveredRecordingIdRef = useRef<number | null>(null);
+
   const { play, current: playingSegment } = usePlayer();
 
   // Stable refs read by draw/hitTest
@@ -252,26 +254,53 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
     ctx.translate(t.x, t.y);
     ctx.scale(t.k, t.k);
 
+    const hoveredRecordingId = hoveredRecordingIdRef.current;
+    const groups = recordingGroupsRef.current;
+    const songColorMap = songColorMapRef.current;
+    const isHovering = hoveredRecordingId !== null;
+
+    const getLineColor = (segs: MoodMapPoint[]) =>
+      mode === "song"
+        ? (songColorMap.get(segs[0].song_title ?? "") ?? "#9ca3af")
+        : "#9ca3af";
+
+    const drawPolyline = (segs: MoodMapPoint[]) => {
+      const visible = segs.filter((p) => !hidden.has(getCategory(p)));
+      if (visible.length < 2) return;
+      ctx.beginPath();
+      ctx.strokeStyle = getLineColor(visible);
+      ctx.moveTo(scales.sx(visible[0].x), scales.sy(visible[0].y));
+      for (let i = 1; i < visible.length; i++) {
+        ctx.lineTo(scales.sx(visible[i].x), scales.sy(visible[i].y));
+      }
+      ctx.stroke();
+    };
+
     // Recording polylines — drawn first so dots appear on top
-    if (showRecordingLinesRef.current) {
-      const groups = recordingGroupsRef.current;
-      const songColorMap = songColorMapRef.current;
-      ctx.lineWidth = 0.8 / t.k;
-      ctx.globalAlpha = 0.25;
-      for (const segs of groups.values()) {
-        const visible = segs.filter((p) => !hidden.has(getCategory(p)));
-        if (visible.length < 2) continue;
-        const lineColor =
-          mode === "song"
-            ? (songColorMap.get(visible[0].song_title ?? "") ?? "#9ca3af")
-            : "#9ca3af";
-        ctx.beginPath();
-        ctx.strokeStyle = lineColor;
-        ctx.moveTo(scales.sx(visible[0].x), scales.sy(visible[0].y));
-        for (let i = 1; i < visible.length; i++) {
-          ctx.lineTo(scales.sx(visible[i].x), scales.sy(visible[i].y));
+    if (showRecordingLinesRef.current || isHovering) {
+      if (isHovering) {
+        // Dim non-hovered lines
+        if (showRecordingLinesRef.current) {
+          ctx.lineWidth = 0.8 / t.k;
+          ctx.globalAlpha = 0.08;
+          for (const [recId, segs] of groups.entries()) {
+            if (recId === hoveredRecordingId) continue;
+            drawPolyline(segs);
+          }
         }
-        ctx.stroke();
+        // Highlight hovered recording's line (always shown when hovering)
+        const hoveredSegs = groups.get(hoveredRecordingId);
+        if (hoveredSegs) {
+          ctx.lineWidth = 2 / t.k;
+          ctx.globalAlpha = 0.85;
+          drawPolyline(hoveredSegs);
+        }
+      } else {
+        ctx.lineWidth = 0.8 / t.k;
+        ctx.globalAlpha = 0.25;
+        for (const segs of groups.values()) {
+          drawPolyline(segs);
+        }
       }
       ctx.globalAlpha = 1;
     }
@@ -279,17 +308,46 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
     const isPassage = kindRef.current === "recording-passage";
     const durScale = durationScaleRef.current;
 
-    for (const p of pts) {
-      if (hidden.has(getCategory(p))) continue;
-      const cx = scales.sx(p.x);
-      const cy = scales.sy(p.y);
-      const r = isPassage && durScale && p.duration != null
+    const getRadius = (p: MoodMapPoint) =>
+      isPassage && durScale && p.duration != null
         ? durScale(p.duration) / t.k
         : POINT_RADIUS / t.k;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = getColor(p, mode);
-      ctx.fill();
+
+    if (isHovering) {
+      // Non-hovered dots: gray and faded
+      ctx.globalAlpha = 0.15;
+      for (const p of pts) {
+        if (hidden.has(getCategory(p))) continue;
+        if (p.recording_id === hoveredRecordingId) continue;
+        const cx = scales.sx(p.x);
+        const cy = scales.sy(p.y);
+        ctx.beginPath();
+        ctx.arc(cx, cy, getRadius(p), 0, Math.PI * 2);
+        ctx.fillStyle = "#6b7280";
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      // Hovered dots: original color, slightly larger
+      for (const p of pts) {
+        if (hidden.has(getCategory(p))) continue;
+        if (p.recording_id !== hoveredRecordingId) continue;
+        const cx = scales.sx(p.x);
+        const cy = scales.sy(p.y);
+        ctx.beginPath();
+        ctx.arc(cx, cy, getRadius(p) * 1.6, 0, Math.PI * 2);
+        ctx.fillStyle = getColor(p, mode);
+        ctx.fill();
+      }
+    } else {
+      for (const p of pts) {
+        if (hidden.has(getCategory(p))) continue;
+        const cx = scales.sx(p.x);
+        const cy = scales.sy(p.y);
+        ctx.beginPath();
+        ctx.arc(cx, cy, getRadius(p), 0, Math.PI * 2);
+        ctx.fillStyle = getColor(p, mode);
+        ctx.fill();
+      }
     }
 
     ctx.restore();
@@ -366,10 +424,22 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current!.getBoundingClientRect();
     setMousePos({ x: e.clientX, y: e.clientY });
-    setHovered(hitTest(e.clientX - rect.left, e.clientY - rect.top));
-  }, [hitTest]);
+    const p = hitTest(e.clientX - rect.left, e.clientY - rect.top);
+    setHovered(p);
+    const newRecordingId = p?.recording_id ?? null;
+    if (hoveredRecordingIdRef.current !== newRecordingId) {
+      hoveredRecordingIdRef.current = newRecordingId;
+      draw();
+    }
+  }, [hitTest, draw]);
 
-  const handleMouseLeave = useCallback(() => setHovered(null), []);
+  const handleMouseLeave = useCallback(() => {
+    setHovered(null);
+    if (hoveredRecordingIdRef.current !== null) {
+      hoveredRecordingIdRef.current = null;
+      draw();
+    }
+  }, [draw]);
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current!.getBoundingClientRect();
