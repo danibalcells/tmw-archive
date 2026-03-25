@@ -19,12 +19,13 @@ const SONG_PALETTE = [
   "#499894", "#e15759", "#79706e", "#d37295", "#a0cbe8",
 ];
 
-// Segment categories for visibility toggling (maps to MoodMapPoint.song_type or "unidentified")
+// Segment categories for visibility toggling (maps to MoodMapPoint.effective_type)
 const CATEGORIES = [
   { key: "original", label: "Originals", color: "#4ade80" },
   { key: "cover", label: "Covers", color: "#60a5fa" },
   { key: "jam", label: "Jams", color: "#f97316" },
-  { key: "unidentified", label: "Unidentified", color: "#6b7280" },
+  { key: "non-musical", label: "Non-musical", color: "#a78bfa" },
+  { key: "unreviewed", label: "Unreviewed", color: "#6b7280" },
 ] as const;
 
 type CategoryKey = (typeof CATEGORIES)[number]["key"];
@@ -39,7 +40,7 @@ const PASSAGE_RADIUS_MIN = 2;
 const PASSAGE_RADIUS_MAX = 10;
 
 function getCategory(p: MoodMapPoint): CategoryKey {
-  return (p.song_type as CategoryKey) ?? "unidentified";
+  return (p.effective_type as CategoryKey) ?? "unreviewed";
 }
 
 function getYear(p: MoodMapPoint): number | null {

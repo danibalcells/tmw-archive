@@ -4,40 +4,47 @@ Reads segments from the DB (with optional source filters), fits a UMAP
 projection, and writes output to data/umaps/<name>.json. Also maintains
 data/umaps/index.json so the API knows what's available.
 
+Each point in the output carries an `effective_type` field with one of five
+values derived from the recording's content_type and song_type:
+  original    — song_take linked to an original song
+  cover       — song_take linked to a cover
+  jam         — classified as a jam (with or without a named Song)
+  non-musical — banter, tuning, noodling, count_in, silence, or other
+  unreviewed  — content_type not yet set
+
 Usage:
   python -m pipeline.scripts.build_segment_umap [options]
 
 Options:
-  --name NAME              Identifier for this projection (default: all).
-                           Used as the filename and in the frontend dropdown.
-  --label LABEL            Human-readable label shown in the UI (default: --name).
-  --include-song-type ...  Only include segments from recordings of these song
-                           types. Choices: original cover jam unidentified.
-                           (default: all types)
-  --include-origin ...     Only include segments from recordings with these
-                           origins. Choices: pretrimmed vad_segment.
-                           (default: all origins)
-  --output-dir DIR         Directory to write JSON files (default: data/umaps/segments).
-  --n-neighbors N          UMAP n_neighbors param (default: 15).
-  --min-dist F             UMAP min_dist param (default: 0.1).
+  --name NAME          Identifier for this projection (default: all).
+                       Used as the filename and in the frontend dropdown.
+  --label LABEL        Human-readable label shown in the UI (default: --name).
+  --include-type ...   Only include segments with these effective types.
+                       Choices: original cover jam non-musical unreviewed.
+                       (default: all types)
+  --include-origin ... Only include segments from recordings with these
+                       origins. Choices: pretrimmed vad_segment.
+                       (default: all origins)
+  --output-dir DIR     Directory to write JSON files (default: data/umaps/segments).
+  --n-neighbors N      UMAP n_neighbors param (default: 15).
+  --min-dist F         UMAP min_dist param (default: 0.1).
 
 Examples:
   # All segments (default)
   python -m pipeline.scripts.build_segment_umap
 
-  # Jams and raw session recordings only
+  # Musical content only
   python -m pipeline.scripts.build_segment_umap \\
-    --name jams-sessions \\
-    --label "Jams + sessions" \\
-    --include-song-type jam unidentified \\
-    --include-origin vad_segment
+    --name musical \\
+    --label "Musical only" \\
+    --include-type original cover jam
 
   # Pre-trimmed songs only
   python -m pipeline.scripts.build_segment_umap \\
     --name songs \\
     --label "Songs (pre-trimmed)" \\
     --include-origin pretrimmed \\
-    --include-song-type original cover
+    --include-type original cover
 """
 
 import argparse
@@ -54,8 +61,19 @@ from pipeline.db.models import Recording, Segment, Session as DbSession, Song
 from pipeline.db.session import SessionLocal
 
 DEFAULT_OUTPUT_DIR = Path("data/umaps/segments")
-SONG_TYPE_CHOICES = ["original", "cover", "jam", "unidentified"]
+EFFECTIVE_TYPE_CHOICES = ["original", "cover", "jam", "non-musical", "unreviewed"]
 ORIGIN_CHOICES = ["pretrimmed", "vad_segment"]
+NON_MUSICAL_TYPES = {"banter", "tuning", "noodling", "count_in", "silence", "other"}
+
+
+def _effective_type(content_type: str | None, song_type: str | None) -> str:
+    if content_type == "song_take":
+        return song_type or "unreviewed"
+    if content_type == "jam":
+        return "jam"
+    if content_type in NON_MUSICAL_TYPES:
+        return "non-musical"
+    return "unreviewed"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -73,11 +91,11 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--name", default="all", help="Identifier for this projection (default: all)")
     p.add_argument("--label", default=None, help="Human-readable label for the UI (default: --name)")
     p.add_argument(
-        "--include-song-type",
+        "--include-type",
         nargs="+",
-        choices=SONG_TYPE_CHOICES,
+        choices=EFFECTIVE_TYPE_CHOICES,
         metavar="TYPE",
-        help=f"Song types to include: {SONG_TYPE_CHOICES}. Default: all.",
+        help=f"Effective types to include: {EFFECTIVE_TYPE_CHOICES}. Default: all.",
     )
     p.add_argument(
         "--include-origin",
@@ -115,15 +133,8 @@ def main() -> None:
     args = _parse_args()
     label = args.label or args.name
 
-    include_song_types: set[str | None] | None = None
-    if args.include_song_type:
-        include_song_types = {
-            None if t == "unidentified" else t for t in args.include_song_type
-        }
-
-    include_origins: set[str] | None = None
-    if args.include_origin:
-        include_origins = set(args.include_origin)
+    include_types: set[str] | None = set(args.include_type) if args.include_type else None
+    include_origins: set[str] | None = set(args.include_origin) if args.include_origin else None
 
     db = SessionLocal()
     try:
@@ -140,6 +151,7 @@ def main() -> None:
                 Recording.title.label("recording_title"),
                 Recording.audio_path,
                 Recording.origin,
+                Recording.content_type,
                 DbSession.date.label("session_date"),
                 Song.title.label("song_title"),
                 Song.song_type,
@@ -159,9 +171,9 @@ def main() -> None:
 
     log.info("Loaded %d segments before filtering", len(rows))
 
-    if include_song_types is not None:
-        rows = [r for r in rows if r.song_type in include_song_types]
-        log.info("After song-type filter (%s): %d segments", args.include_song_type, len(rows))
+    if include_types is not None:
+        rows = [r for r in rows if _effective_type(r.content_type, r.song_type) in include_types]
+        log.info("After type filter (%s): %d segments", args.include_type, len(rows))
 
     if include_origins is not None:
         rows = [r for r in rows if r.origin in include_origins]
@@ -202,7 +214,7 @@ def main() -> None:
             "origin": row.origin,
             "session_date": row.session_date,
             "song_title": row.song_title,
-            "song_type": row.song_type,
+            "effective_type": _effective_type(row.content_type, row.song_type),
             "mean_rms": round(float(row.mean_rms), 6) if row.mean_rms is not None else None,
             "mean_spectral_centroid": round(float(row.mean_spectral_centroid), 2) if row.mean_spectral_centroid is not None else None,
         })
@@ -216,7 +228,7 @@ def main() -> None:
     log.info("Written %d points to %s (%.1f MB)", len(points), output_path, size_mb)
 
     filters = {
-        "include_song_type": args.include_song_type,
+        "include_type": args.include_type,
         "include_origin": args.include_origin,
     }
     _update_index(args.output_dir, args.name, label, len(points), filters)

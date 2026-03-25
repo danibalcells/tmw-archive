@@ -64,8 +64,19 @@ from pipeline.db.session import SessionLocal
 
 DEFAULT_SEGMENTS_DIR = Path("data/umaps/segments")
 DEFAULT_OUTPUT_DIR = Path("data/umaps/recording-passage")
-SONG_TYPE_CHOICES = ["original", "cover", "jam", "unidentified"]
+EFFECTIVE_TYPE_CHOICES = ["original", "cover", "jam", "non-musical", "unreviewed"]
 ORIGIN_CHOICES = ["pretrimmed", "vad_segment"]
+NON_MUSICAL_TYPES = {"banter", "tuning", "noodling", "count_in", "silence", "other"}
+
+
+def _effective_type(content_type: str | None, song_type: str | None) -> str:
+    if content_type == "song_take":
+        return song_type or "unreviewed"
+    if content_type == "jam":
+        return "jam"
+    if content_type in NON_MUSICAL_TYPES:
+        return "non-musical"
+    return "unreviewed"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -109,11 +120,11 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--max-segments", type=int, default=20,
                    help="Maximum segments per passage (default: 20)")
     p.add_argument(
-        "--include-song-type",
+        "--include-type",
         nargs="+",
-        choices=SONG_TYPE_CHOICES,
+        choices=EFFECTIVE_TYPE_CHOICES,
         metavar="TYPE",
-        help=f"Song types to include: {SONG_TYPE_CHOICES}. Default: all.",
+        help=f"Effective types to include: {EFFECTIVE_TYPE_CHOICES}. Default: all.",
     )
     p.add_argument(
         "--include-origin",
@@ -247,6 +258,7 @@ def _load_rows(db_rows_cache: list | None) -> list:
                 Recording.title.label("recording_title"),
                 Recording.audio_path,
                 Recording.origin,
+                Recording.content_type,
                 DbSession.date.label("session_date"),
                 Song.title.label("song_title"),
                 Song.song_type,
@@ -278,19 +290,12 @@ def _build_one(
     }
     log.info("Loaded %d segment coordinates", len(coord_map))
 
-    include_song_types: set[str | None] | None = None
-    if args.include_song_type:
-        include_song_types = {
-            None if t == "unidentified" else t for t in args.include_song_type
-        }
-
-    include_origins: set[str] | None = None
-    if args.include_origin:
-        include_origins = set(args.include_origin)
+    include_types: set[str] | None = set(args.include_type) if args.include_type else None
+    include_origins: set[str] | None = set(args.include_origin) if args.include_origin else None
 
     filtered = rows
-    if include_song_types is not None:
-        filtered = [r for r in filtered if r.song_type in include_song_types]
+    if include_types is not None:
+        filtered = [r for r in filtered if _effective_type(r.content_type, r.song_type) in include_types]
     if include_origins is not None:
         filtered = [r for r in filtered if r.origin in include_origins]
 
@@ -309,7 +314,7 @@ def _build_one(
                 "origin": r.origin,
                 "session_date": r.session_date,
                 "song_title": r.song_title,
-                "song_type": r.song_type,
+                "effective_type": _effective_type(r.content_type, r.song_type),
             }
 
     log.info(
@@ -356,7 +361,7 @@ def _build_one(
                 "origin": meta["origin"],
                 "session_date": meta["session_date"],
                 "song_title": meta["song_title"],
-                "song_type": meta["song_type"],
+                "effective_type": meta["effective_type"],
                 "mean_rms": round(float(np.mean(rms_vals)), 6) if rms_vals else None,
                 "mean_spectral_centroid": round(float(np.mean(cent_vals)), 2) if cent_vals else None,
             })
@@ -388,7 +393,7 @@ def _build_one(
 
     filters = {
         "source_umap": str(source_path),
-        "include_song_type": args.include_song_type,
+        "include_type": args.include_type,
         "include_origin": args.include_origin,
         "cosine_threshold": args.cosine_threshold,
         "min_segments": args.min_segments,

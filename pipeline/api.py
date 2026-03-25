@@ -261,6 +261,16 @@ def _generate_slug(title: str, db: Session) -> str:
     return slug
 
 
+def _jam_auto_title(session_date: str | None, db: Session) -> str:
+    base = f"Jam \u2014 {session_date}" if session_date else "Jam \u2014 unknown"
+    existing_count = (
+        db.query(Song)
+        .filter(Song.song_type == "jam", Song.title.like(f"{base}%"))
+        .count()
+    )
+    return base if existing_count == 0 else f"{base} #{existing_count + 1}"
+
+
 @app.get("/api/songs", response_model=list[SongDetailOut])
 def list_songs(db: Session = Depends(get_session)) -> list[SongDetailOut]:
     songs = (
@@ -418,6 +428,15 @@ def classify_recording(
     rec.content_type_source = "human"
     if body.content_type == "song_take" and body.song_id is not None:
         rec.song_id = body.song_id
+        _rename_recording_file(rec, db)
+    elif body.content_type == "jam" and rec.song_id is None:
+        session_date = rec.session.date if rec.session else None
+        title = _jam_auto_title(session_date, db)
+        slug = _generate_slug(title, db)
+        song = Song(title=title, slug=slug, song_type="jam")
+        db.add(song)
+        db.flush()
+        rec.song_id = song.id
         _rename_recording_file(rec, db)
     db.commit()
     db.refresh(rec)

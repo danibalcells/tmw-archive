@@ -114,7 +114,7 @@ export interface MoodMapPoint {
   origin: string;
   session_date: string | null;
   song_title: string | null;
-  song_type: string | null;
+  effective_type: string | null;
   mean_rms: number | null;
   mean_spectral_centroid: number | null;
 }
@@ -124,7 +124,7 @@ export interface MoodMapMeta {
   label: string;
   count: number;
   filters: {
-    include_song_type: string[] | null;
+    include_type: string[] | null;
     include_origin: string[] | null;
   };
 }
