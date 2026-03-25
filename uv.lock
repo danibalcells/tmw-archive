@@ -1040,6 +1040,20 @@ wheels = [
 ]
 
 [[package]]
+name = "nnaudio"
+version = "0.3.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "scipy" },
+    { name = "torch" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c1/0a/720b3ebfa8efe8ac964a89e45964a5f500e2825e5e0566291f88ecc55f43/nnaudio-0.3.4.tar.gz", hash = "sha256:bda234f99c11dd7806e13593d607fdd258b86d87dc6735e810e0d8ce57fd3711", size = 39505 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/59/8b/fa7173e7749a57ff5a1008050aed1433874e4010a7537a1588883ad597d6/nnaudio-0.3.4-py3-none-any.whl", hash = "sha256:48db0c54443f4f3f54057d416bd9ba304110552b4bba32f897e864f55deaa87c", size = 43847 },
+]
+
+[[package]]
 name = "numba"
 version = "0.64.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2232,6 +2246,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "laion-clap" },
     { name = "librosa" },
+    { name = "nnaudio" },
     { name = "numpy" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
@@ -2252,6 +2267,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.135.2" },
     { name = "laion-clap", specifier = ">=1.1.5" },
     { name = "librosa", specifier = ">=0.11.0" },
+    { name = "nnaudio", specifier = ">=0.3.4" },
     { name = "numpy", specifier = ">=2.4.3" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },

@@ -16,6 +16,12 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
+CONTENT_TYPE_VALUES = (
+    "'song_take'", "'jam'", "'banter'", "'tuning'", "'noodling'",
+    "'silence'", "'count_in'", "'other'",
+)
+CONTENT_TYPE_SOURCE_VALUES = ("'ingest'", "'auto'", "'human'")
+
 
 class Base(DeclarativeBase):
     pass
@@ -89,6 +95,14 @@ class Recording(Base):
         CheckConstraint(
             "origin IN ('pretrimmed', 'vad_segment')", name="ck_recordings_origin"
         ),
+        CheckConstraint(
+            f"content_type IN ({', '.join(CONTENT_TYPE_VALUES)})",
+            name="ck_recordings_content_type",
+        ),
+        CheckConstraint(
+            f"content_type_source IN ({', '.join(CONTENT_TYPE_SOURCE_VALUES)})",
+            name="ck_recordings_content_type_source",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -105,6 +119,9 @@ class Recording(Base):
     end_offset_seconds: Mapped[Optional[float]] = mapped_column(Float)
     duration_seconds: Mapped[Optional[float]] = mapped_column(Float)
     origin: Mapped[str] = mapped_column(String(16), nullable=False)
+    coverhunter_embedding: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
+    content_type: Mapped[Optional[str]] = mapped_column(String(16))
+    content_type_source: Mapped[Optional[str]] = mapped_column(String(16))
 
     session: Mapped[Optional["Session"]] = relationship(back_populates="recordings")
     song: Mapped[Optional["Song"]] = relationship(back_populates="recordings")
@@ -116,6 +133,11 @@ class Recording(Base):
     )
     processing_logs: Mapped[list["ProcessingLog"]] = relationship(
         back_populates="recording", cascade="all, delete-orphan"
+    )
+    song_match_candidates: Mapped[list["SongMatchCandidate"]] = relationship(
+        back_populates="recording",
+        foreign_keys="SongMatchCandidate.recording_id",
+        cascade="all, delete-orphan",
     )
 
 
@@ -206,3 +228,48 @@ class ProcessingLog(Base):
     error_message: Mapped[Optional[str]] = mapped_column(Text)
 
     recording: Mapped["Recording"] = relationship(back_populates="processing_logs")
+
+
+class SongMatchCandidate(Base):
+    """Proposed song match for an unlabeled recording, produced by match_songs.py.
+
+    recording_id: the unknown recording being identified.
+    song_id: the proposed song match.
+    nearest_recording_id: which specific labeled recording had the highest
+        cosine similarity — stored so the QA UI can play it side-by-side.
+    confidence: cosine similarity score (0–1); best per-song similarity across
+        all labeled reference recordings.
+    rank: 1 = best match for this recording, 2 = second best, etc.
+    status: 'pending' | 'accepted' | 'rejected'
+    """
+
+    __tablename__ = "song_match_candidates"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'accepted', 'rejected')",
+            name="ck_song_match_candidates_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recording_id: Mapped[int] = mapped_column(
+        ForeignKey("recordings.id"), nullable=False, index=True
+    )
+    song_id: Mapped[int] = mapped_column(
+        ForeignKey("songs.id"), nullable=False, index=True
+    )
+    nearest_recording_id: Mapped[int] = mapped_column(
+        ForeignKey("recordings.id"), nullable=False
+    )
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+    recording: Mapped["Recording"] = relationship(
+        back_populates="song_match_candidates",
+        foreign_keys=[recording_id],
+    )
+    song: Mapped["Song"] = relationship(foreign_keys=[song_id])
+    nearest_recording: Mapped["Recording"] = relationship(foreign_keys=[nearest_recording_id])
