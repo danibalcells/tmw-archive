@@ -33,40 +33,40 @@ export function Sessions() {
   return (
     <div className="flex h-full">
       <div className={`flex flex-col overflow-hidden transition-all ${selectedSession ? "w-1/2" : "w-full"}`}>
-        <div className="px-6 py-5 border-b border-zinc-800">
-          <h1 className="text-lg font-semibold">Sessions</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">{sessions.length} rehearsal days</p>
+        <div className="px-6 py-5 border-b border-warm-200">
+          <h1 className="text-lg font-medium">Sessions</h1>
+          <p className="text-sm text-warm-400 mt-0.5">{sessions.length} rehearsal days</p>
         </div>
         <div className="flex-1 overflow-y-auto">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-zinc-950 border-b border-zinc-800">
+            <thead className="sticky top-0 bg-cream border-b border-warm-200">
               <tr>
-                <th className="text-left px-6 py-3 text-xs text-zinc-500 font-medium uppercase tracking-wide">Date</th>
-                <th className="text-left px-4 py-3 text-xs text-zinc-500 font-medium uppercase tracking-wide">Notes</th>
-                <th className="text-right px-6 py-3 text-xs text-zinc-500 font-medium uppercase tracking-wide">Recordings</th>
+                <th className="text-left px-6 py-3 text-xs text-warm-400 font-medium uppercase tracking-widest">Date</th>
+                <th className="text-left px-4 py-3 text-xs text-warm-400 font-medium uppercase tracking-widest">Notes</th>
+                <th className="text-right px-6 py-3 text-xs text-warm-400 font-medium uppercase tracking-widest">Recordings</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-800/60">
+            <tbody className="divide-y divide-warm-200/60">
               {sessions.map((session) => (
                 <tr
                   key={session.id}
                   onClick={() => handleSelectSession(session)}
-                  className={`cursor-pointer hover:bg-zinc-800/40 transition-colors ${
-                    selectedSession?.id === session.id ? "bg-zinc-800/60" : ""
+                  className={`cursor-pointer hover:bg-warm-100/40 transition-colors ${
+                    selectedSession?.id === session.id ? "bg-warm-100/60" : ""
                   }`}
                 >
                   <td className="px-6 py-3">
-                    <div className="font-medium text-white">
+                    <div className="font-medium text-warm-900">
                       {session.date}
                       {session.date_uncertain && (
-                        <span className="ml-1.5 text-xs text-zinc-500">(?)</span>
+                        <span className="ml-1.5 text-xs text-warm-400">(?)</span>
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-zinc-400">
-                    {session.notes ?? <span className="text-zinc-700">—</span>}
+                  <td className="px-4 py-3 text-warm-600">
+                    {session.notes ?? <span className="text-warm-300">—</span>}
                   </td>
-                  <td className="px-6 py-3 text-zinc-400 text-right tabular-nums">
+                  <td className="px-6 py-3 text-warm-600 text-right tabular-nums">
                     {session.recording_count}
                   </td>
                 </tr>
@@ -77,7 +77,7 @@ export function Sessions() {
       </div>
 
       {selectedSession && (
-        <div className="w-1/2 border-l border-zinc-800 flex flex-col overflow-hidden">
+        <div className="w-1/2 border-l border-warm-200 flex flex-col overflow-hidden">
           <RecordingPane
             title={selectedSession.date}
             subtitle={

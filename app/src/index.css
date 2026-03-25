@@ -1,1 +1,26 @@
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Cutive Mono", monospace;
+  --font-mono: "Cutive Mono", monospace;
+
+  --color-cream: #F5F0E8;
+  --color-warm-50: #EDE8DD;
+  --color-warm-100: #E4DED3;
+  --color-warm-200: #D4CFC4;
+  --color-warm-300: #CAC5B9;
+  --color-warm-400: #8A8578;
+  --color-warm-600: #4A4A4A;
+  --color-warm-900: #1A1A1A;
+
+  --color-accent: #BE1E2D;
+  --color-accent-dark: #9B1823;
+  --color-bauhaus-blue: #21409A;
+  --color-bauhaus-yellow: #C8881A;
+}
+
+html,
+body {
+  background-color: var(--color-cream);
+  color: var(--color-warm-900);
+}

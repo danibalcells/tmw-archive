@@ -20,19 +20,19 @@ export function NowPlayingBar() {
     `Recording ${current.recording_id}`;
 
   return (
-    <div className="flex-shrink-0 border-t border-zinc-800 bg-zinc-900 px-5 py-3 flex items-center gap-4">
+    <div className="flex-shrink-0 border-t border-warm-200 bg-warm-50 px-5 py-3 flex items-center gap-4">
       <button
         onClick={isPlaying ? pause : resume}
-        className="w-8 h-8 flex items-center justify-center rounded-full bg-green-500 hover:bg-green-400 transition-colors flex-shrink-0"
+        className="w-8 h-8 flex items-center justify-center rounded-full bg-accent hover:bg-accent-dark transition-colors flex-shrink-0"
         aria-label={isPlaying ? "Pause" : "Resume"}
       >
         {isPlaying ? (
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-black">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white">
             <rect x="3" y="2" width="3.5" height="12" />
             <rect x="9.5" y="2" width="3.5" height="12" />
           </svg>
         ) : (
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-black">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white">
             <polygon points="3,1 13,8 3,15" />
           </svg>
         )}
@@ -40,17 +40,17 @@ export function NowPlayingBar() {
 
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-1.5">
-          <span className="text-sm font-medium text-zinc-100 truncate">{label}</span>
+          <span className="text-sm font-medium text-warm-900 truncate">{label}</span>
           {current.session_date && (
-            <span className="text-xs text-zinc-500 flex-shrink-0">{current.session_date}</span>
+            <span className="text-xs text-warm-400 flex-shrink-0">{current.session_date}</span>
           )}
-          <span className="text-xs text-zinc-600 flex-shrink-0 ml-auto">
+          <span className="text-xs text-warm-400 flex-shrink-0 ml-auto">
             {formatTime(elapsed)} / {formatTime(duration)}
           </span>
         </div>
-        <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
+        <div className="h-1 bg-warm-200 rounded-full overflow-hidden">
           <div
-            className="h-full bg-green-500 rounded-full transition-none"
+            className="h-full bg-accent rounded-full transition-none"
             style={{ width: `${progress * 100}%` }}
           />
         </div>
@@ -58,7 +58,7 @@ export function NowPlayingBar() {
 
       <button
         onClick={stop}
-        className="w-7 h-7 flex items-center justify-center rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors flex-shrink-0"
+        className="w-7 h-7 flex items-center justify-center rounded-sm text-warm-400 hover:text-warm-900 hover:bg-warm-100 transition-colors flex-shrink-0"
         aria-label="Stop"
       >
         <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current">

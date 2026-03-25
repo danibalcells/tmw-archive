@@ -20,9 +20,9 @@ export function WaveformPlayer({ url }: WaveformPlayerProps) {
 
     const ws = WaveSurfer.create({
       container: containerRef.current,
-      waveColor: "#4ade80",
-      progressColor: "#16a34a",
-      cursorColor: "#bbf7d0",
+      waveColor: "#21409A",
+      progressColor: "#BE1E2D",
+      cursorColor: "#BE1E2D",
       barWidth: 2,
       barGap: 1,
       barRadius: 2,
@@ -72,38 +72,38 @@ export function WaveformPlayer({ url }: WaveformPlayerProps) {
 
   if (error) {
     return (
-      <div className="rounded-lg bg-zinc-800 p-4 text-sm text-zinc-500">
+      <div className="rounded-sm bg-warm-100 border border-warm-200 p-4 text-sm text-warm-400">
         Audio file not available
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg bg-zinc-800 p-4 space-y-3">
+    <div className="rounded-sm bg-warm-50 border border-warm-200 p-4 space-y-3">
       <div ref={containerRef} className={ready ? "" : "opacity-0 h-16"} />
       {!ready && (
         <div className="h-16 flex items-center justify-center">
-          <div className="text-zinc-500 text-sm animate-pulse">Loading…</div>
+          <div className="text-warm-400 text-sm animate-pulse">Loading…</div>
         </div>
       )}
       <div className="flex items-center gap-3">
         <button
           onClick={toggle}
           disabled={!ready}
-          className="flex items-center justify-center w-9 h-9 rounded-full bg-green-500 hover:bg-green-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center justify-center w-9 h-9 rounded-full bg-accent hover:bg-accent-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           {playing ? (
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-black">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-white">
               <rect x="3" y="2" width="4" height="12" rx="1" />
               <rect x="9" y="2" width="4" height="12" rx="1" />
             </svg>
           ) : (
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-black ml-0.5">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-white ml-0.5">
               <path d="M4 2.5l10 5.5-10 5.5V2.5z" />
             </svg>
           )}
         </button>
-        <span className="text-xs text-zinc-400 tabular-nums">
+        <span className="text-xs text-warm-600 tabular-nums">
           {fmt(currentTime)} / {fmt(duration)}
         </span>
       </div>

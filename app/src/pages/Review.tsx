@@ -29,19 +29,19 @@ function ConfidenceBar({ value }: { value: number }) {
   const pct = Math.round(value * 100);
   const color =
     value >= 0.7
-      ? "bg-green-500"
+      ? "bg-bauhaus-blue"
       : value >= 0.4
-      ? "bg-yellow-500"
-      : "bg-red-500";
+      ? "bg-bauhaus-yellow"
+      : "bg-accent";
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-warm-200 rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full ${color}`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs tabular-nums text-zinc-400 w-8 text-right">
+      <span className="text-xs tabular-nums text-warm-600 w-8 text-right">
         {pct}%
       </span>
     </div>
@@ -66,8 +66,8 @@ function InlineWaveform({
   url,
   label,
   waveRef,
-  waveColor = "#4ade80",
-  progressColor = "#16a34a",
+  waveColor = "#21409A",
+  progressColor = "#BE1E2D",
   onTimeUpdate,
 }: InlineWaveformProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -91,7 +91,7 @@ function InlineWaveform({
       container: containerRef.current,
       waveColor,
       progressColor,
-      cursorColor: "#bbf7d0",
+      cursorColor: "#BE1E2D",
       barWidth: 2,
       barGap: 1,
       barRadius: 2,
@@ -136,39 +136,39 @@ function InlineWaveform({
 
   if (error) {
     return (
-      <div className="rounded-lg bg-zinc-800/60 p-3 text-sm text-zinc-500">
+      <div className="rounded-sm bg-warm-100 border border-warm-200 p-3 text-sm text-warm-400">
         Audio unavailable
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg bg-zinc-800/60 p-3 space-y-2">
-      {label && <div className="text-xs text-zinc-500 font-medium">{label}</div>}
+    <div className="rounded-sm bg-warm-50 border border-warm-200 p-3 space-y-2">
+      {label && <div className="text-xs text-warm-400 font-medium">{label}</div>}
       <div ref={containerRef} className={ready ? "" : "opacity-0 h-14"} />
       {!ready && (
         <div className="h-14 flex items-center justify-center">
-          <span className="text-zinc-600 text-xs animate-pulse">Loading…</span>
+          <span className="text-warm-400 text-xs animate-pulse">Loading…</span>
         </div>
       )}
       <div className="flex items-center gap-2">
         <button
           onClick={() => wsRef.current?.playPause()}
           disabled={!ready}
-          className="flex items-center justify-center w-7 h-7 rounded-full bg-green-500 hover:bg-green-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+          className="flex items-center justify-center w-7 h-7 rounded-full bg-accent hover:bg-accent-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
         >
           {playing ? (
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-black">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-white">
               <rect x="3" y="2" width="4" height="12" rx="1" />
               <rect x="9" y="2" width="4" height="12" rx="1" />
             </svg>
           ) : (
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-black ml-0.5">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-white ml-0.5">
               <path d="M4 2.5l10 5.5-10 5.5V2.5z" />
             </svg>
           )}
         </button>
-        <span className="text-xs text-zinc-500 tabular-nums">
+        <span className="text-xs text-warm-400 tabular-nums">
           {fmt(currentTime)} / {fmt(duration)}
         </span>
       </div>
@@ -207,14 +207,14 @@ function SongPicker({ songs, onSelect, onCreate, onClose }: SongPickerProps) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden">
-        <div className="px-4 pt-4 pb-3 border-b border-zinc-800">
+      <div className="bg-cream border border-warm-200 rounded shadow-xl w-full max-w-md flex flex-col overflow-hidden">
+        <div className="px-4 pt-4 pb-3 border-b border-warm-200">
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search or type a new song name…"
-            className="w-full bg-zinc-800 text-zinc-100 placeholder-zinc-500 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-green-500"
+            className="w-full bg-warm-100 border border-warm-200 text-warm-900 placeholder-warm-400 rounded-sm px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-accent"
             onKeyDown={(e) => {
               if (e.key === "Escape") onClose();
               if (e.key === "Enter" && showCreate) onCreate(trimmed);
@@ -226,29 +226,29 @@ function SongPicker({ songs, onSelect, onCreate, onClose }: SongPickerProps) {
             <button
               key={song.id}
               onClick={() => onSelect(song)}
-              className="w-full text-left px-4 py-2.5 text-sm hover:bg-zinc-800 transition-colors flex items-center gap-2"
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-warm-100 transition-colors flex items-center gap-2"
             >
-              <span className="text-zinc-100">{song.title}</span>
-              <span className="text-xs text-zinc-500 ml-auto">{song.song_type}</span>
+              <span className="text-warm-900">{song.title}</span>
+              <span className="text-xs text-warm-400 ml-auto">{song.song_type}</span>
             </button>
           ))}
           {filtered.length === 0 && !showCreate && (
-            <div className="px-4 py-6 text-sm text-zinc-500 text-center">No songs found</div>
+            <div className="px-4 py-6 text-sm text-warm-400 text-center">No songs found</div>
           )}
           {showCreate && (
             <button
               onClick={() => onCreate(trimmed)}
-              className="w-full text-left px-4 py-2.5 text-sm hover:bg-zinc-800 transition-colors flex items-center gap-2 border-t border-zinc-800"
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-warm-100 transition-colors flex items-center gap-2 border-t border-warm-200"
             >
-              <span className="text-green-400">+ Create</span>
-              <span className="text-zinc-100 ml-1">"{trimmed}"</span>
-              <span className="text-xs text-zinc-500 ml-auto">original</span>
+              <span className="text-accent">+ Create</span>
+              <span className="text-warm-900 ml-1">"{trimmed}"</span>
+              <span className="text-xs text-warm-400 ml-auto">original</span>
             </button>
           )}
         </div>
-        <div className="px-4 py-2.5 border-t border-zinc-800 text-xs text-zinc-600 flex justify-between">
+        <div className="px-4 py-2.5 border-t border-warm-200 text-xs text-warm-400 flex justify-between">
           <span>Click to assign · Enter to create new</span>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+          <button onClick={onClose} className="text-warm-400 hover:text-warm-900 transition-colors">
             Esc to close
           </button>
         </div>
@@ -270,19 +270,19 @@ function CandidatePanel({ candidates, activeRefId, onAccept, onPlayRef }: Candid
 
   return (
     <div className="space-y-2">
-      <div className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
+      <div className="text-xs font-medium text-warm-400 uppercase tracking-widest">
         Song Match Candidates
       </div>
       {pending.map((c) => (
-        <div key={c.id} className="rounded-lg bg-zinc-800/80 p-3 space-y-2">
+        <div key={c.id} className="rounded-sm bg-warm-50 border border-warm-200 p-3 space-y-2">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-500 font-mono">#{c.rank}</span>
-                <span className="text-sm font-medium text-zinc-100 truncate">{c.song_title}</span>
+                <span className="text-xs text-warm-400">#{c.rank}</span>
+                <span className="text-sm font-medium text-warm-900 truncate">{c.song_title}</span>
               </div>
               {c.nearest_recording_session_date && (
-                <div className="text-xs text-zinc-500 mt-0.5">
+                <div className="text-xs text-warm-400 mt-0.5">
                   ref: {c.nearest_recording_session_date}
                 </div>
               )}
@@ -290,10 +290,10 @@ function CandidatePanel({ candidates, activeRefId, onAccept, onPlayRef }: Candid
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <button
                 onClick={() => onPlayRef(c)}
-                className={`px-2 py-1 rounded text-xs transition-colors ${
+                className={`px-2 py-1 rounded-sm text-xs transition-colors ${
                   activeRefId === c.id
-                    ? "bg-green-600 text-white"
-                    : "bg-zinc-700 hover:bg-zinc-600 text-zinc-300"
+                    ? "bg-accent text-white"
+                    : "bg-warm-200 hover:bg-warm-300 text-warm-600"
                 }`}
                 title={`r — play ref for #${c.rank}`}
               >
@@ -301,7 +301,7 @@ function CandidatePanel({ candidates, activeRefId, onAccept, onPlayRef }: Candid
               </button>
               <button
                 onClick={() => onAccept(c)}
-                className="px-2 py-1 rounded text-xs bg-green-600 hover:bg-green-500 text-white transition-colors"
+                className="px-2 py-1 rounded-sm text-xs bg-accent hover:bg-accent-dark text-white transition-colors"
                 title={`${c.rank} — accept candidate #${c.rank}`}
               >
                 ✓ Accept
@@ -334,14 +334,14 @@ function JamNamer({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-sm p-5 space-y-4">
-        <div className="text-sm font-medium text-zinc-200">Name this jam</div>
+      <div className="bg-cream border border-warm-200 rounded shadow-xl w-full max-w-sm p-5 space-y-4">
+        <div className="text-sm font-medium text-warm-900">Name this jam</div>
         <input
           ref={inputRef}
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Leave blank to classify without naming…"
-          className="w-full bg-zinc-800 text-zinc-100 placeholder-zinc-500 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-green-500"
+          className="w-full bg-warm-100 border border-warm-200 text-warm-900 placeholder-warm-400 rounded-sm px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-accent"
           onKeyDown={(e) => {
             if (e.key === "Enter") onConfirm(name);
             if (e.key === "Escape") onClose();
@@ -350,13 +350,13 @@ function JamNamer({
         <div className="flex gap-2 justify-end">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+            className="px-3 py-1.5 rounded-sm text-sm text-warm-400 hover:text-warm-900 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={() => onConfirm(name)}
-            className="px-3 py-1.5 rounded-lg text-sm bg-zinc-700 hover:bg-zinc-600 text-zinc-100 transition-colors"
+            className="px-3 py-1.5 rounded-sm text-sm bg-warm-200 hover:bg-warm-300 text-warm-900 transition-colors"
           >
             {name.trim() ? "Create & assign" : "Classify as jam"}
           </button>
@@ -753,7 +753,7 @@ export function Review() {
     : null;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-zinc-950">
+    <div className="flex flex-col h-full overflow-hidden bg-cream">
       {showSongPicker && (
         <SongPicker
           songs={songs}
@@ -770,51 +770,51 @@ export function Review() {
         />
       )}
 
-      <div className="flex-shrink-0 border-b border-zinc-800 px-6 py-4 space-y-3">
+      <div className="flex-shrink-0 border-b border-warm-200 px-6 py-4 space-y-3">
         <div className="flex items-center justify-between gap-4">
-          <h1 className="text-lg font-semibold">Review</h1>
+          <h1 className="text-lg font-medium">Review</h1>
           {stats && (
-            <span className="text-sm text-zinc-400">
+            <span className="text-sm text-warm-600">
               {stats.classified} / {stats.total_recordings} classified ({progressPct}%)
             </span>
           )}
         </div>
 
         {stats && (
-          <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-warm-200 rounded-full overflow-hidden">
             <div
-              className="h-full bg-green-500 rounded-full transition-all"
+              className="h-full bg-accent rounded-full transition-all"
               style={{ width: `${progressPct}%` }}
             />
           </div>
         )}
 
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-zinc-400">
+          <label className="flex items-center gap-2 text-sm text-warm-600">
             Sort:
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value)}
-              className="bg-zinc-800 border border-zinc-700 text-zinc-100 rounded px-2 py-1 text-sm outline-none focus:border-green-500"
+              className="bg-warm-50 border border-warm-200 text-warm-900 rounded-sm px-2 py-1 text-sm outline-none focus:border-accent"
             >
               <option value="confidence">Confidence</option>
               <option value="duration">Duration</option>
               <option value="date">Date</option>
             </select>
           </label>
-          <label className="flex items-center gap-2 text-sm text-zinc-400">
+          <label className="flex items-center gap-2 text-sm text-warm-600">
             Filter:
             <select
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              className="bg-zinc-800 border border-zinc-700 text-zinc-100 rounded px-2 py-1 text-sm outline-none focus:border-green-500"
+              className="bg-warm-50 border border-warm-200 text-warm-900 rounded-sm px-2 py-1 text-sm outline-none focus:border-accent"
             >
               <option value="unreviewed">Unreviewed</option>
               <option value="auto">Auto-classified</option>
               <option value="all">All</option>
             </select>
           </label>
-          <span className="ml-auto text-xs text-zinc-600">
+          <span className="ml-auto text-xs text-warm-400">
             {currentIndex + 1} / {queue.length}
           </span>
         </div>
@@ -822,55 +822,55 @@ export function Review() {
 
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
         {loading && (
-          <div className="flex items-center justify-center h-40 text-zinc-500 text-sm animate-pulse">
+          <div className="flex items-center justify-center h-40 text-warm-400 text-sm animate-pulse">
             Loading queue…
           </div>
         )}
 
         {!loading && error && (
-          <div className="rounded-lg bg-red-900/30 border border-red-800 px-4 py-3 text-sm text-red-300">
+          <div className="rounded-sm bg-accent/10 border border-accent/30 px-4 py-3 text-sm text-accent">
             {error}
           </div>
         )}
 
         {!loading && !error && queue.length === 0 && (
-          <div className="flex items-center justify-center h-40 text-zinc-500 text-sm">
+          <div className="flex items-center justify-center h-40 text-warm-400 text-sm">
             Nothing to review.
           </div>
         )}
 
         {!loading && current && (
           <>
-            <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-4 space-y-4">
+            <div className="rounded bg-warm-50 border border-warm-200 p-4 space-y-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
-                  <div className="text-base font-semibold text-zinc-100">
+                  <div className="text-base font-medium text-warm-900">
                     {current.title ?? `Recording #${current.id}`}
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-zinc-500">
+                  <div className="flex items-center gap-3 text-xs text-warm-400">
                     <span>ID: {current.id}</span>
                     {current.session_date && <span>{current.session_date}</span>}
                     {current.duration_seconds !== null && (
                       <span>{formatDuration(current.duration_seconds)}</span>
                     )}
-                    <span className="text-zinc-600">{current.origin}</span>
+                    <span className="text-warm-300">{current.origin}</span>
                   </div>
                   {current.content_type && (
                     <div className="flex items-center gap-1.5 mt-1">
                       <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium ${
                           current.content_type === "song"
-                            ? "bg-green-900/50 text-green-300"
-                            : "bg-zinc-700 text-zinc-400"
+                            ? "bg-accent/15 text-accent"
+                            : "bg-warm-200 text-warm-600"
                         }`}
                       >
                         {current.content_type}
                       </span>
                       {current.content_type_source === "auto" && (
-                        <span className="text-xs text-yellow-500">auto-suggested</span>
+                        <span className="text-xs text-bauhaus-yellow">auto-suggested</span>
                       )}
                       {current.song_title && (
-                        <span className="text-xs text-zinc-400">→ {current.song_title}</span>
+                        <span className="text-xs text-warm-600">→ {current.song_title}</span>
                       )}
                     </div>
                   )}
@@ -885,7 +885,7 @@ export function Review() {
                   onTimeUpdate={setMainCurrentTime}
                 />
               ) : (
-                <div className="rounded-lg bg-zinc-800/60 p-3 text-sm text-zinc-500">
+                <div className="rounded-sm bg-warm-100 border border-warm-200 p-3 text-sm text-warm-400">
                   No audio available
                 </div>
               )}
@@ -896,8 +896,8 @@ export function Review() {
                   url={refUrl}
                   label="Reference recording"
                   waveRef={refWaveRef}
-                  waveColor="#60a5fa"
-                  progressColor="#2563eb"
+                  waveColor="#8A8578"
+                  progressColor="#4A4A4A"
                 />
               )}
             </div>
@@ -912,27 +912,27 @@ export function Review() {
             )}
 
             <div className="space-y-2">
-              <div className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
+              <div className="text-xs font-medium text-warm-400 uppercase tracking-widest">
                 Classify as
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => setShowSongPicker(true)}
                   disabled={actionPending}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-green-700 hover:bg-green-600 text-white transition-colors disabled:opacity-40"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-sm bg-accent hover:bg-accent-dark text-white transition-colors disabled:opacity-40"
                 >
                   Song…
-                  <kbd className="ml-1 text-xs bg-green-900/60 px-1 rounded font-mono">s</kbd>
+                  <kbd className="ml-1 text-xs bg-accent-dark/40 px-1 rounded-sm font-mono">s</kbd>
                 </button>
                 {CONTENT_TYPES.map(({ key, label, shortcut }) => (
                   <button
                     key={key}
                     onClick={() => key === "jam" ? setShowJamNamer(true) : handleClassify(key)}
                     disabled={actionPending}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-zinc-700 hover:bg-zinc-600 text-zinc-200 transition-colors disabled:opacity-40"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-sm bg-warm-200 hover:bg-warm-300 text-warm-900 transition-colors disabled:opacity-40"
                   >
                     {label}
-                    <kbd className="ml-1 text-xs bg-zinc-900/60 px-1 rounded font-mono">
+                    <kbd className="ml-1 text-xs bg-warm-300/60 px-1 rounded-sm font-mono">
                       {shortcut}
                     </kbd>
                   </button>
@@ -942,7 +942,7 @@ export function Review() {
 
             {mainAudioUrl && (
               <div className="space-y-2">
-                <div className="text-xs font-medium text-zinc-400 uppercase tracking-wide">
+                <div className="text-xs font-medium text-warm-400 uppercase tracking-widest">
                   Split recording
                 </div>
                 <div className="flex items-center gap-3">
@@ -954,19 +954,19 @@ export function Review() {
                       (current.duration_seconds !== null &&
                         mainCurrentTime >= current.duration_seconds - 1)
                     }
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm bg-zinc-700 hover:bg-zinc-600 text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-sm bg-warm-200 hover:bg-warm-300 text-warm-900 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                     title="Split recording at current playhead position (snaps to nearest segment boundary)"
                   >
                     ✂ Split at {formatDuration(mainCurrentTime)}
                   </button>
-                  <span className="text-xs text-zinc-600">
+                  <span className="text-xs text-warm-400">
                     Snaps to nearest segment boundary · segments &amp; features remapped
                   </span>
                 </div>
               </div>
             )}
 
-            <div className="text-xs text-zinc-600 space-y-0.5">
+            <div className="text-xs text-warm-400 space-y-0.5">
               <div>
                 Shortcuts: <kbd className="font-mono">Space</kbd> play/pause ·{" "}
                 <kbd className="font-mono">1/2/3</kbd> accept candidate ·{" "}
@@ -979,11 +979,11 @@ export function Review() {
       </div>
 
       {!loading && queue.length > 0 && (
-        <div className="flex-shrink-0 border-t border-zinc-800 px-6 py-3 flex items-center justify-between">
+        <div className="flex-shrink-0 border-t border-warm-200 px-6 py-3 flex items-center justify-between">
           <button
             onClick={goPrev}
             disabled={currentIndex === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-sm bg-warm-100 hover:bg-warm-200 text-warm-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             <span>←</span> Prev
           </button>
@@ -991,20 +991,20 @@ export function Review() {
             <button
               onClick={handleUndo}
               disabled={undoStack.length === 0 || actionPending}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-sm bg-warm-100 hover:bg-warm-200 text-warm-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               title="Undo last label (u)"
             >
               ↩ Undo
-              <kbd className="ml-1 text-xs bg-zinc-900/60 px-1 rounded font-mono">u</kbd>
+              <kbd className="ml-1 text-xs bg-warm-200/60 px-1 rounded-sm font-mono">u</kbd>
             </button>
-            <span className="text-xs text-zinc-600">
+            <span className="text-xs text-warm-400">
               {currentIndex + 1} of {queue.length}
             </span>
           </div>
           <button
             onClick={goNext}
             disabled={currentIndex === queue.length - 1}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-sm bg-warm-100 hover:bg-warm-200 text-warm-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             Next <span>→</span>
           </button>

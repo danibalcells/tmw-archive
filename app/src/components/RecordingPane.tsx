@@ -22,16 +22,16 @@ export function RecordingPane({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-start justify-between gap-4 p-5 border-b border-zinc-800">
+      <div className="flex items-start justify-between gap-4 p-5 border-b border-warm-200">
         <div>
-          <h2 className="text-base font-semibold text-white leading-snug">{title}</h2>
+          <h2 className="text-base font-medium text-warm-900 leading-snug">{title}</h2>
           {subtitle && (
-            <p className="text-sm text-zinc-500 mt-0.5">{subtitle}</p>
+            <p className="text-sm text-warm-400 mt-0.5">{subtitle}</p>
           )}
         </div>
         <button
           onClick={onClose}
-          className="mt-0.5 text-zinc-500 hover:text-white transition-colors flex-shrink-0"
+          className="mt-0.5 text-warm-400 hover:text-warm-900 transition-colors flex-shrink-0"
           aria-label="Close"
         >
           <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
@@ -41,20 +41,20 @@ export function RecordingPane({
       </div>
 
       {selected && (
-        <div className="p-5 border-b border-zinc-800 space-y-3">
+        <div className="p-5 border-b border-warm-200 space-y-3">
           <div>
-            <div className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Now playing</div>
-            <div className="text-sm text-white font-medium">
+            <div className="text-xs text-warm-400 uppercase tracking-widest mb-1">Now playing</div>
+            <div className="text-sm text-warm-900 font-medium">
               {selected.title ?? "Untitled"}
             </div>
             {selected.session_date && (
-              <div className="text-xs text-zinc-500 mt-0.5">{selected.session_date}</div>
+              <div className="text-xs text-warm-400 mt-0.5">{selected.session_date}</div>
             )}
           </div>
           {selected.audio_path ? (
             <WaveformPlayer url={audioUrl(selected.id)} />
           ) : (
-            <div className="rounded-lg bg-zinc-800 p-4 text-sm text-zinc-500">
+            <div className="rounded-sm bg-warm-100 border border-warm-200 p-4 text-sm text-warm-400">
               Audio not yet processed
             </div>
           )}
@@ -63,29 +63,29 @@ export function RecordingPane({
 
       <div className="flex-1 overflow-y-auto">
         {recordings.length === 0 ? (
-          <p className="p-5 text-sm text-zinc-500">No recordings</p>
+          <p className="p-5 text-sm text-warm-400">No recordings</p>
         ) : (
           <ul>
             {recordings.map((rec) => (
               <li key={rec.id}>
                 <button
                   onClick={() => onSelect(rec.id)}
-                  className={`w-full text-left px-5 py-3 flex items-center justify-between gap-3 hover:bg-zinc-800/60 transition-colors ${
-                    selectedId === rec.id ? "bg-zinc-800" : ""
+                  className={`w-full text-left px-5 py-3 flex items-center justify-between gap-3 hover:bg-warm-100/60 transition-colors ${
+                    selectedId === rec.id ? "bg-warm-100" : ""
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="text-sm text-white truncate">
+                    <div className="text-sm text-warm-900 truncate">
                       {rec.title ?? "Untitled"}
                     </div>
-                    <div className="text-xs text-zinc-500 mt-0.5">
+                    <div className="text-xs text-warm-400 mt-0.5">
                       {rec.session_date ?? "Date unknown"}
                       {rec.song_title && rec.song_title !== rec.title && (
                         <> · {rec.song_title}</>
                       )}
                     </div>
                   </div>
-                  <span className="text-xs text-zinc-500 flex-shrink-0 tabular-nums">
+                  <span className="text-xs text-warm-400 flex-shrink-0 tabular-nums">
                     {formatDuration(rec.duration_seconds)}
                   </span>
                 </button>

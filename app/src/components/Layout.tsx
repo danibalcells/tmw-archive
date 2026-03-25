@@ -14,11 +14,11 @@ const NAV = [
 export function Layout() {
   return (
     <PlayerProvider>
-      <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100 overflow-hidden">
+      <div className="flex flex-col h-screen bg-cream text-warm-900 overflow-hidden">
         <div className="flex flex-1 overflow-hidden">
-          <nav className="w-48 flex-shrink-0 border-r border-zinc-800 flex flex-col pt-8 pb-4">
+          <nav className="w-48 flex-shrink-0 border-r border-warm-200 flex flex-col pt-8 pb-4">
             <div className="px-5 mb-8">
-              <span className="text-sm font-bold tracking-wide text-green-400 uppercase">
+              <span className="text-xs font-medium tracking-widest text-accent uppercase">
                 TMW Archive
               </span>
             </div>
@@ -28,10 +28,10 @@ export function Layout() {
                   <NavLink
                     to={to}
                     className={({ isActive }) =>
-                      `block px-3 py-2 rounded-md text-sm transition-colors ${
+                      `block px-3 py-2 rounded-sm text-sm transition-colors ${
                         isActive
-                          ? "bg-zinc-800 text-white font-medium"
-                          : "text-zinc-400 hover:text-white hover:bg-zinc-800/50"
+                          ? "bg-warm-100 text-warm-900 font-medium"
+                          : "text-warm-600 hover:text-warm-900 hover:bg-warm-100/70"
                       }`
                     }
                   >

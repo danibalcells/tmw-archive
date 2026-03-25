@@ -11,7 +11,7 @@ type MoodMapKind = "segments" | "recording-passage";
 
 type ColorMode = "energy" | "brightness" | "year" | "type" | "song";
 
-// 20-color categorical palette for songs (Tableau 20-ish, hand-tuned for dark bg)
+// 20-color categorical palette for songs (Tableau 20, works on light backgrounds)
 const SONG_PALETTE = [
   "#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
   "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac",
@@ -19,13 +19,13 @@ const SONG_PALETTE = [
   "#499894", "#e15759", "#79706e", "#d37295", "#a0cbe8",
 ];
 
-// Segment categories for visibility toggling (maps to MoodMapPoint.effective_type)
+// Bauhaus primary palette for segment categories
 const CATEGORIES = [
-  { key: "original", label: "Originals", color: "#4ade80" },
-  { key: "cover", label: "Covers", color: "#60a5fa" },
-  { key: "jam", label: "Jams", color: "#f97316" },
-  { key: "non-musical", label: "Non-musical", color: "#a78bfa" },
-  { key: "unreviewed", label: "Unreviewed", color: "#6b7280" },
+  { key: "original", label: "Originals", color: "#BE1E2D" },
+  { key: "cover", label: "Covers", color: "#21409A" },
+  { key: "jam", label: "Jams", color: "#C8881A" },
+  { key: "non-musical", label: "Non-musical", color: "#8A8578" },
+  { key: "unreviewed", label: "Unreviewed", color: "#C8C3B8" },
 ] as const;
 
 type CategoryKey = (typeof CATEGORIES)[number]["key"];
@@ -214,24 +214,24 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
   }, []);
 
   const getSongColor = useCallback((songTitle: string | null): string => {
-    if (!songTitle) return "#6b7280";
-    return songColorMapRef.current.get(songTitle) ?? "#6b7280";
+    if (!songTitle) return "#8A8578";
+    return songColorMapRef.current.get(songTitle) ?? "#8A8578";
   }, []);
 
   const getColor = useCallback((p: MoodMapPoint, mode: ColorMode): string => {
     const cs = colorScalesRef.current;
-    if (!cs) return "#6b7280";
+    if (!cs) return "#8A8578";
     switch (mode) {
       case "energy":
-        return p.mean_rms !== null ? cs.rms(p.mean_rms) : "#6b7280";
+        return p.mean_rms !== null ? cs.rms(p.mean_rms) : "#8A8578";
       case "brightness":
-        return p.mean_spectral_centroid !== null ? cs.centroid(p.mean_spectral_centroid) : "#6b7280";
+        return p.mean_spectral_centroid !== null ? cs.centroid(p.mean_spectral_centroid) : "#8A8578";
       case "year": {
         const yr = getYear(p);
-        return yr ? cs.year(yr) : "#6b7280";
+        return yr ? cs.year(yr) : "#8A8578";
       }
       case "type":
-        return CATEGORY_COLOR[getCategory(p)] ?? "#6b7280";
+        return CATEGORY_COLOR[getCategory(p)] ?? "#8A8578";
       case "song":
         return getSongColor(p.song_title);
     }
@@ -263,8 +263,8 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
 
     const getLineColor = (segs: MoodMapPoint[]) =>
       mode === "song"
-        ? (songColorMap.get(segs[0].song_title ?? "") ?? "#9ca3af")
-        : "#9ca3af";
+        ? (songColorMap.get(segs[0].song_title ?? "") ?? "#8A8578")
+        : "#8A8578";
 
     const drawPolyline = (segs: MoodMapPoint[]) => {
       const visible = segs.filter((p) => !hidden.has(getCategory(p)));
@@ -316,8 +316,8 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
         : POINT_RADIUS / t.k;
 
     if (isHovering) {
-      // Non-hovered dots: gray and faded
-      ctx.globalAlpha = 0.15;
+      // Non-hovered dots: muted and faded against the cream background
+      ctx.globalAlpha = 0.18;
       for (const p of pts) {
         if (hidden.has(getCategory(p))) continue;
         if (p.recording_id === hoveredRecordingId) continue;
@@ -325,7 +325,7 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
         const cy = scales.sy(p.y);
         ctx.beginPath();
         ctx.arc(cx, cy, getRadius(p), 0, Math.PI * 2);
-        ctx.fillStyle = "#6b7280";
+        ctx.fillStyle = "#C8C3B8";
         ctx.fill();
       }
       ctx.globalAlpha = 1;
@@ -479,18 +479,18 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
   const visibleCount = points.filter((p) => !hiddenCategories.has(getCategory(p))).length;
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 text-zinc-100 relative">
+    <div className="flex flex-col h-full bg-cream text-warm-900 relative">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-2.5 border-b border-zinc-800 flex-shrink-0">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-2.5 border-b border-warm-200 flex-shrink-0">
 
         {/* UMAP selector */}
         {mapList.length > 0 && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-500 flex-shrink-0">UMAP</span>
+            <span className="text-xs text-warm-400 flex-shrink-0">UMAP</span>
             <select
               value={selectedMap ?? ""}
               onChange={(e) => setSelectedMap(e.target.value)}
-              className="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded px-2 py-1 focus:outline-none focus:border-zinc-500"
+              className="bg-warm-50 border border-warm-200 text-warm-900 text-xs rounded-sm px-2 py-1 focus:outline-none focus:border-warm-400"
             >
               {mapList.map((m) => (
                 <option key={m.name} value={m.name}>
@@ -503,22 +503,22 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
 
         {/* Visibility toggles */}
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-zinc-500 flex-shrink-0">Show</span>
+          <span className="text-xs text-warm-400 flex-shrink-0">Show</span>
           {CATEGORIES.map(({ key, label, color }) => {
             const hidden = hiddenCategories.has(key);
             return (
               <button
                 key={key}
                 onClick={() => toggleCategory(key)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors border ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs transition-colors border ${
                   hidden
-                    ? "border-zinc-700 text-zinc-600 bg-transparent"
-                    : "border-zinc-600 text-zinc-200 bg-zinc-800"
+                    ? "border-warm-200 text-warm-400 bg-transparent"
+                    : "border-warm-200 text-warm-900 bg-warm-100"
                 }`}
               >
                 <span
                   className="w-2 h-2 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: hidden ? "#3f3f46" : color }}
+                  style={{ backgroundColor: hidden ? "#D4CFC4" : color }}
                 />
                 {label}
               </button>
@@ -528,18 +528,18 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
 
         {/* Recording lines toggle */}
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-zinc-500 flex-shrink-0">Lines</span>
+          <span className="text-xs text-warm-400 flex-shrink-0">Lines</span>
           <button
             onClick={() => setShowRecordingLines((v) => !v)}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors border ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs transition-colors border ${
               showRecordingLines
-                ? "border-zinc-600 text-zinc-200 bg-zinc-800"
-                : "border-zinc-700 text-zinc-600 bg-transparent"
+                ? "border-warm-200 text-warm-900 bg-warm-100"
+                : "border-warm-200 text-warm-400 bg-transparent"
             }`}
           >
             <span
               className="w-2 h-2 rounded-full flex-shrink-0"
-              style={{ backgroundColor: showRecordingLines ? "#9ca3af" : "#3f3f46" }}
+              style={{ backgroundColor: showRecordingLines ? "#8A8578" : "#D4CFC4" }}
             />
             Recording lines
           </button>
@@ -547,15 +547,15 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
 
         {/* Color mode */}
         <div className="flex items-center gap-1.5 ml-auto">
-          <span className="text-xs text-zinc-500">Color</span>
+          <span className="text-xs text-warm-400">Color</span>
           {(["type", "song", "energy", "brightness", "year"] as ColorMode[]).map((m) => (
             <button
               key={m}
               onClick={() => setColorMode(m)}
-              className={`px-2.5 py-1 rounded text-xs transition-colors ${
+              className={`px-2.5 py-1 rounded-sm text-xs transition-colors ${
                 colorMode === m
-                  ? "bg-zinc-700 text-white"
-                  : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  ? "bg-warm-200 text-warm-900"
+                  : "text-warm-600 hover:text-warm-900 hover:bg-warm-100"
               }`}
             >
               {m === "energy" ? "Energy" : m === "brightness" ? "Brightness" : m === "year" ? "Year" : m === "song" ? "Song" : "Type"}
@@ -565,7 +565,7 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
 
         {/* Point count */}
         {points.length > 0 && (
-          <span className="text-xs text-zinc-600 flex-shrink-0">
+          <span className="text-xs text-warm-400 flex-shrink-0">
             {visibleCount.toLocaleString()} / {points.length.toLocaleString()}
           </span>
         )}
@@ -574,12 +574,12 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
       {/* Canvas */}
       <div ref={containerRef} className="flex-1 relative overflow-hidden">
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center text-zinc-500 text-sm">
+          <div className="absolute inset-0 flex items-center justify-center text-warm-400 text-sm">
             Loading…
           </div>
         )}
         {!loading && error && (
-          <div className="absolute inset-0 flex items-center justify-center text-zinc-400 text-sm px-8 text-center">
+          <div className="absolute inset-0 flex items-center justify-center text-warm-600 text-sm px-8 text-center">
             {error}
           </div>
         )}
@@ -598,39 +598,39 @@ export function MoodMap({ kind }: { kind: MoodMapKind }) {
       {/* Tooltip and hint live outside overflow-hidden so they're never clipped */}
       {hovered && (
         <div
-          className="fixed z-50 pointer-events-none bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-xs shadow-xl max-w-56"
+          className="fixed z-50 pointer-events-none bg-cream border border-warm-200 rounded-sm px-3 py-2 text-xs shadow-lg max-w-56"
           style={{ left: mousePos.x + 14, top: mousePos.y - 10 }}
         >
-          <div className="font-medium text-zinc-100 truncate mb-1">
+          <div className="font-medium text-warm-900 truncate mb-1">
             {hovered.recording_title ?? hovered.audio_path ?? `Recording ${hovered.recording_id}`}
           </div>
           {hovered.session_date && (
-            <div className="text-zinc-400">{hovered.session_date}</div>
+            <div className="text-warm-600">{hovered.session_date}</div>
           )}
           {hovered.song_title && (
-            <div className="text-zinc-400 truncate">{hovered.song_title}</div>
+            <div className="text-warm-600 truncate">{hovered.song_title}</div>
           )}
-          <div className="text-zinc-500 mt-1">
+          <div className="text-warm-400 mt-1">
             {formatTime(hovered.start_seconds)} – {formatTime(hovered.end_seconds)}
           </div>
           {hovered.duration != null && (
-            <div className="text-zinc-500">
+            <div className="text-warm-400">
               {Math.round(hovered.duration)}s passage · {hovered.segment_count} segments
             </div>
           )}
           {hovered.mean_rms !== null && (
-            <div className="text-zinc-500">
+            <div className="text-warm-400">
               Energy {hovered.mean_rms.toFixed(4)} · Brightness {hovered.mean_spectral_centroid?.toFixed(0)}
             </div>
           )}
           {playingSegment?.segment_id === (hovered.passage_id ?? hovered.segment_id) && (
-            <div className="text-green-400 mt-1">▶ playing</div>
+            <div className="text-accent mt-1">▶ playing</div>
           )}
         </div>
       )}
 
       {points.length > 0 && !loading && (
-        <div className="absolute bottom-3 right-4 text-zinc-700 text-xs pointer-events-none">
+        <div className="absolute bottom-3 right-4 text-warm-400 text-xs pointer-events-none">
           scroll to zoom · drag to pan · click to play
         </div>
       )}
