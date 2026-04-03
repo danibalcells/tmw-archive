@@ -17,6 +17,7 @@ from pipeline.config import PROCESSED_ROOT
 
 MOOD_MAP_BASE_DIR = Path("data/umaps")
 MOOD_MAP_KINDS = {"segments", "recording-passage"}
+PASSAGES_BASE_DIR = Path("data/eternal-rehearsal")
 from pipeline.db.models import FeatureTimeseries, ProcessingLog, Recording, Segment, Session as DbSession, Song, SongMatchCandidate
 from pipeline.db.session import get_session
 from pipeline.features.clap_embeddings import unpack_embedding
@@ -872,6 +873,66 @@ def get_mood_map(kind: str, name: str) -> FileResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"UMAP '{name}' not found for kind '{kind}'.")
     return FileResponse(str(path), media_type="application/json")
+
+
+@app.get("/api/passages/runs")
+def list_passage_runs():
+    if not PASSAGES_BASE_DIR.exists():
+        return []
+    runs = []
+    for d in sorted(PASSAGES_BASE_DIR.iterdir()):
+        if not d.is_dir() or not (d / "passages.json").exists():
+            continue
+        config = json.loads((d / "config.json").read_text()) if (d / "config.json").exists() else {}
+        types_data = json.loads((d / "passage_types.json").read_text()) if (d / "passage_types.json").exists() else {}
+        passage_count = sum(t.get("count", 0) for t in types_data.values())
+        runs.append({
+            "name": d.name,
+            "n_clusters": config.get("n_clusters", 0),
+            "method": config.get("method", "unknown"),
+            "passage_count": passage_count,
+            "type_count": len(types_data),
+        })
+    return runs
+
+
+def _valid_run_name(run: str) -> bool:
+    return bool(run) and all(c.isalnum() or c in "-_." for c in run) and ".." not in run
+
+
+@app.get("/api/passages/{run}/types")
+def get_passage_types(run: str):
+    if not _valid_run_name(run):
+        raise HTTPException(status_code=400, detail="Invalid run name.")
+    types_path = PASSAGES_BASE_DIR / run / "passage_types.json"
+    if not types_path.exists():
+        raise HTTPException(status_code=404, detail=f"No passage types for run '{run}'.")
+    return json.loads(types_path.read_text())
+
+
+@app.get("/api/passages/{run}/type/{type_id}")
+def get_passages_by_type(run: str, type_id: int):
+    if not _valid_run_name(run):
+        raise HTTPException(status_code=400, detail="Invalid run name.")
+    passages_path = PASSAGES_BASE_DIR / run / "passages.json"
+    if not passages_path.exists():
+        raise HTTPException(status_code=404, detail=f"No passages for run '{run}'.")
+    passages = json.loads(passages_path.read_text())
+    return [p for p in passages if p["passage_type"] == type_id]
+
+
+@app.get("/api/passages/{run}/recording/{recording_id}")
+def get_passages_by_recording(run: str, recording_id: int):
+    if not _valid_run_name(run):
+        raise HTTPException(status_code=400, detail="Invalid run name.")
+    passages_path = PASSAGES_BASE_DIR / run / "passages.json"
+    if not passages_path.exists():
+        raise HTTPException(status_code=404, detail=f"No passages for run '{run}'.")
+    passages = json.loads(passages_path.read_text())
+    return sorted(
+        [p for p in passages if p["recording_id"] == recording_id],
+        key=lambda p: p["start_seconds"],
+    )
 
 
 @app.get("/api/audio/{recording_id}")

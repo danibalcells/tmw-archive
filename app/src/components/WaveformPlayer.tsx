@@ -1,13 +1,19 @@
 import WaveSurfer from "wavesurfer.js";
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+
+export interface WaveformPlayerHandle {
+  seekAndPlay: (seconds: number) => void;
+}
 
 interface WaveformPlayerProps {
   url: string;
 }
 
-export function WaveformPlayer({ url }: WaveformPlayerProps) {
+export const WaveformPlayer = forwardRef<WaveformPlayerHandle, WaveformPlayerProps>(
+function WaveformPlayer({ url }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
+  const pendingSeekRef = useRef<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
@@ -36,6 +42,11 @@ export function WaveformPlayer({ url }: WaveformPlayerProps) {
       if (!active) return;
       setReady(true);
       setDuration(ws.getDuration());
+      if (pendingSeekRef.current !== null) {
+        ws.setTime(pendingSeekRef.current);
+        ws.play();
+        pendingSeekRef.current = null;
+      }
     });
     ws.on("play", () => active && setPlaying(true));
     ws.on("pause", () => active && setPlaying(false));
@@ -61,6 +72,19 @@ export function WaveformPlayer({ url }: WaveformPlayerProps) {
       setDuration(0);
     };
   }, [url]);
+
+  useImperativeHandle(ref, () => ({
+    seekAndPlay(seconds: number) {
+      const ws = wsRef.current;
+      if (!ws) return;
+      if (!ready) {
+        pendingSeekRef.current = seconds;
+        return;
+      }
+      ws.setTime(seconds);
+      ws.play();
+    },
+  }), [ready]);
 
   const toggle = () => wsRef.current?.playPause();
 
@@ -109,4 +133,4 @@ export function WaveformPlayer({ url }: WaveformPlayerProps) {
       </div>
     </div>
   );
-}
+});

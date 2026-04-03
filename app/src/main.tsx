@@ -5,6 +5,7 @@ import "./index.css";
 import { Layout } from "./components/Layout";
 import { Jams } from "./pages/Jams";
 import { MoodMap } from "./pages/MoodMap";
+import { Passages } from "./pages/Passages";
 import { Review } from "./pages/Review";
 import { Sessions } from "./pages/Sessions";
 import { Songs } from "./pages/Songs";
@@ -18,6 +19,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="songs" element={<Songs />} />
           <Route path="jams" element={<Jams />} />
           <Route path="sessions" element={<Sessions />} />
+          <Route path="passages" element={<Passages />} />
           <Route path="review" element={<Review />} />
           <Route path="mood-map">
             <Route index element={<Navigate to="segments" replace />} />

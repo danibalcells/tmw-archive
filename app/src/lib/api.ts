@@ -262,6 +262,58 @@ export async function revertRecording(id: number): Promise<ReviewRecording> {
   return apiPost<ReviewRecording>(`/api/recordings/${id}/revert`);
 }
 
+export interface PassageRun {
+  name: string;
+  n_clusters: number;
+  method: string;
+  passage_count: number;
+  type_count: number;
+}
+
+export interface PassageTypeSummary {
+  type_id: number;
+  count: number;
+  n_recordings: number;
+  mean_duration: number;
+  mean_rms: number | null;
+  mean_spectral_centroid: number | null;
+  top_songs: { title: string; count: number }[];
+}
+
+export interface Passage {
+  passage_id: number;
+  passage_type: number;
+  recording_id: number;
+  segment_ids: number[];
+  start_seconds: number;
+  end_seconds: number;
+  duration: number;
+  segment_count: number;
+  mean_rms: number | null;
+  mean_spectral_centroid: number | null;
+  recording_title: string | null;
+  audio_path: string | null;
+  session_date: string | null;
+  song_title: string | null;
+  effective_type: string | null;
+}
+
+export async function fetchPassageRuns(): Promise<PassageRun[]> {
+  return apiFetch<PassageRun[]>("/api/passages/runs", []);
+}
+
+export async function fetchPassageTypes(run: string): Promise<Record<string, PassageTypeSummary>> {
+  return apiFetch<Record<string, PassageTypeSummary>>(`/api/passages/${run}/types`, {});
+}
+
+export async function fetchPassagesByType(run: string, typeId: number): Promise<Passage[]> {
+  return apiFetch<Passage[]>(`/api/passages/${run}/type/${typeId}`, []);
+}
+
+export async function fetchPassagesByRecording(run: string, recordingId: number): Promise<Passage[]> {
+  return apiFetch<Passage[]>(`/api/passages/${run}/recording/${recordingId}`, []);
+}
+
 export interface SplitResult {
   actual_split_at: number;
   recordings: [ReviewRecording, ReviewRecording];
