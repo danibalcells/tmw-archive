@@ -216,31 +216,47 @@ function TypeDetailPanel({
 }) {
   const [passages, setPassages] = useState<Passage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     setLoading(true);
+    setSearch("");
     fetchPassagesByType(run, typeId).then((p) => {
       setPassages(p);
       setLoading(false);
     });
   }, [run, typeId]);
 
+  const filtered = useMemo(() => {
+    if (!search.trim()) return passages;
+    const q = search.toLowerCase();
+    return passages.filter(
+      (p) =>
+        p.song_title?.toLowerCase().includes(q) ||
+        p.recording_title?.toLowerCase().includes(q) ||
+        p.session_date?.toLowerCase().includes(q) ||
+        p.effective_type?.toLowerCase().includes(q)
+    );
+  }, [passages, search]);
+
+  const isSearching = search.trim().length > 0;
+
   const samples = useMemo(() => {
     const byRecording = new Map<number, Passage[]>();
-    for (const p of passages) {
+    for (const p of filtered) {
       const arr = byRecording.get(p.recording_id) ?? [];
       arr.push(p);
       byRecording.set(p.recording_id, arr);
     }
     const picked: Passage[] = [];
     const entries = [...byRecording.entries()];
-    entries.sort(() => Math.random() - 0.5);
+    if (!isSearching) entries.sort(() => Math.random() - 0.5);
     for (const [, arr] of entries) {
-      if (picked.length >= 15) break;
+      if (!isSearching && picked.length >= 15) break;
       picked.push(arr[Math.floor(Math.random() * arr.length)]);
     }
     return picked;
-  }, [passages]);
+  }, [filtered, isSearching]);
 
   const color = colorScale(typeId);
 
@@ -271,6 +287,33 @@ function TypeDetailPanel({
             ))}
           </div>
         )}
+        <div className="relative mt-3">
+          <svg
+            viewBox="0 0 20 20"
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-400 pointer-events-none"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <circle cx="8.5" cy="8.5" r="5.5" />
+            <line x1="12.5" y1="12.5" x2="17" y2="17" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search recordings…"
+            className="w-full pl-8 pr-3 py-1.5 text-sm bg-warm-50 border border-warm-200 rounded-sm placeholder:text-warm-300 focus:outline-none focus:border-warm-400"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-600 text-xs"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -281,7 +324,12 @@ function TypeDetailPanel({
         )}
         {!loading && samples.length === 0 && (
           <div className="flex items-center justify-center h-32 text-warm-400 text-sm">
-            No passages found
+            {isSearching ? "No matching recordings" : "No passages found"}
+          </div>
+        )}
+        {!loading && isSearching && samples.length > 0 && (
+          <div className="px-6 py-2 text-xs text-warm-400 border-b border-warm-200/60">
+            {samples.length} recording{samples.length !== 1 ? "s" : ""} matching "{search.trim()}"
           </div>
         )}
         {!loading && samples.map((p) => (

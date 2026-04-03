@@ -1,26 +1,24 @@
-"""Runner: librosa feature extraction for all unprocessed recordings.
+"""Runner: MERT embedding extraction for all unprocessed recordings.
 
-Queries the processing_log for recordings that don't yet have a successful
-'librosa' step at the current version, runs feature extraction in parallel
-using a process pool, and writes results back to the DB from the main process
-(single SQLite writer). Safe to run repeatedly — already-processed recordings
-are skipped automatically.
+Loads one MERT-v1-330M model, then processes recordings using a thread pool.
+Each thread loads audio independently, acquires a lock for model inference.
 
 Usage:
-  python -m pipeline.scripts.extract_librosa_features [options]
+  python -m pipeline.scripts.extract_mert_embeddings [options]
 
 Options:
-  --workers N       Worker processes (default: cpu_count - 1)
-  --recording-id N  Process a single recording by ID
-  --tier N [N ...]  Restrict to dev subset(s): --tier 1, --tier 2, or --tier 1 2
-  --dry-run         Print what would be processed without writing to the DB
+  --workers N          Thread count (default: 2)
+  --device DEVICE      cpu / mps / cuda (default: cpu)
+  --recording-id N     Process a single recording by ID
+  --tier N [N ...]     Restrict to dev subset(s)
+  --dry-run            Print what would be processed without writing
 """
 
 import argparse
 import logging
-import os
 import sys
-from concurrent.futures import ProcessPoolExecutor, as_completed
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from dotenv import load_dotenv
 
@@ -31,10 +29,10 @@ from pipeline.db.models import Recording
 from pipeline.db.processing import mark_processed, needs_processing
 from pipeline.db.segments import ensure_segments
 from pipeline.db.session import SessionLocal
-from pipeline.features.librosa_features import compute_features, write_features
+from pipeline.features.mert_embeddings import compute_embeddings, load_model, write_embeddings
 from pipeline.ingest.tiers import filter_recording_ids_by_tier, tier_paths_for
 
-LIBROSA_VERSION = "2"
+MERT_VERSION = "1"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,33 +43,12 @@ log = logging.getLogger(__name__)
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Extract librosa features for recordings.")
-    p.add_argument(
-        "--workers",
-        type=int,
-        default=max(1, (os.cpu_count() or 2) - 1),
-        help="Number of worker processes (default: cpu_count - 1)",
-    )
-    p.add_argument(
-        "--recording-id",
-        type=int,
-        default=None,
-        help="Process a single recording by ID (default: all unprocessed)",
-    )
-    p.add_argument(
-        "--tier",
-        type=int,
-        nargs="+",
-        choices=[1, 2],
-        metavar="N",
-        default=None,
-        help="Restrict to dev subset(s): --tier 1, --tier 2, or --tier 1 2",
-    )
-    p.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print what would be processed without writing to the DB",
-    )
+    p = argparse.ArgumentParser(description="Extract MERT embeddings for recordings.")
+    p.add_argument("--workers", type=int, default=2)
+    p.add_argument("--device", type=str, default="cpu", choices=["cpu", "mps", "cuda"])
+    p.add_argument("--recording-id", type=int, default=None)
+    p.add_argument("--tier", type=int, nargs="+", choices=[1, 2], metavar="N", default=None)
+    p.add_argument("--dry-run", action="store_true")
     return p.parse_args()
 
 
@@ -83,7 +60,7 @@ def _build_task(recording: Recording, segments: list) -> dict:
     }
 
 
-def _is_eligible(recording: Recording, rec_id: int) -> bool:
+def _is_eligible(recording: Recording | None, rec_id: int) -> bool:
     if recording is None:
         log.warning("Recording %d not found — skipping", rec_id)
         return False
@@ -91,10 +68,7 @@ def _is_eligible(recording: Recording, rec_id: int) -> bool:
         log.warning("Recording %d has no audio_path — skipping", rec_id)
         return False
     if recording.duration_seconds is None:
-        log.warning(
-            "Recording %d has no duration_seconds — run backfill_durations.py first, skipping",
-            rec_id,
-        )
+        log.warning("Recording %d has no duration_seconds — skipping", rec_id)
         return False
     return True
 
@@ -107,7 +81,7 @@ def main() -> None:
         if args.recording_id is not None:
             recording_ids = [args.recording_id]
         else:
-            recording_ids = needs_processing(db, "librosa", LIBROSA_VERSION)
+            recording_ids = needs_processing(db, "mert", MERT_VERSION)
 
         if args.tier:
             tier_paths = tier_paths_for(args.tier)
@@ -127,11 +101,13 @@ def main() -> None:
                     log.info("DRY  would process recording %d (%s)", rec_id, rec.audio_path)
             return
 
-        ok = skipped = failed = 0
-        workers = max(1, args.workers)
-        log.info("Using %d worker process(es)", workers)
+        log.info("Loading MERT model on %s…", args.device)
+        model, processor = load_model(args.device)
+        model_lock = threading.Lock()
+        log.info("MERT model loaded. Using %d worker thread(s)", args.workers)
 
-        # Pre-load recordings and ensure segments exist (DB work, main process only).
+        ok = skipped = failed = 0
+
         tasks: dict[int, dict] = {}
         segments_by_rec: dict[int, list] = {}
         for rec_id in recording_ids:
@@ -154,29 +130,31 @@ def main() -> None:
             log.info("Done. ok=%d skipped=%d failed=%d", ok, skipped, failed)
             return
 
-        # Submit all extraction tasks to the pool; write results as they complete.
         future_to_rec_id: dict = {}
-        with ProcessPoolExecutor(max_workers=workers) as pool:
+        with ThreadPoolExecutor(max_workers=args.workers) as pool:
             for rec_id, task in tasks.items():
-                future = pool.submit(compute_features, task)
+                future = pool.submit(
+                    compute_embeddings,
+                    task, model, processor, model_lock, args.device,
+                )
                 future_to_rec_id[future] = rec_id
 
             for future in as_completed(future_to_rec_id):
                 rec_id = future_to_rec_id[future]
-                rec = db.get(Recording, rec_id)
                 segs = segments_by_rec[rec_id]
 
                 try:
                     result = future.result()
-                    write_features(result, rec, segs, db)
+                    write_embeddings(result, segs, db)
                     db.commit()
-                    mark_processed(db, rec_id, "librosa", LIBROSA_VERSION)
-                    log.info("DONE recording %d — %d segments", rec_id, len(segs))
+                    mark_processed(db, rec_id, "mert", MERT_VERSION)
+                    n_embedded = len(result["embeddings"])
+                    log.info("DONE recording %d — %d segments embedded", rec_id, n_embedded)
                     ok += 1
                 except Exception as exc:
                     db.rollback()
                     mark_processed(
-                        db, rec_id, "librosa", LIBROSA_VERSION,
+                        db, rec_id, "mert", MERT_VERSION,
                         status="failed", error_message=str(exc),
                     )
                     log.error("FAIL recording %d — %s", rec_id, exc)

@@ -26,12 +26,16 @@ result = {
     "segment_stats": [                         # one dict per segment
         {
             "id": int,
-            "mean_rms": float,
-            "var_rms": float,
-            "mean_spectral_centroid": float,
-            "var_spectral_centroid": float,
-            "mean_chroma": bytes,              # 12 × float32
-            "var_chroma": bytes,
+            "mean_rms": float, "var_rms": float,
+            "mean_spectral_centroid": float, "var_spectral_centroid": float,
+            "mean_chroma": bytes, "var_chroma": bytes,
+            "mean_mfcc": bytes, "var_mfcc": bytes,
+            "mean_spectral_bandwidth": float, "var_spectral_bandwidth": float,
+            "mean_spectral_flatness": float, "var_spectral_flatness": float,
+            "mean_spectral_rolloff": float, "var_spectral_rolloff": float,
+            "mean_zcr": float, "var_zcr": float,
+            "onset_density": float,
+            "mean_spectral_contrast": bytes, "var_spectral_contrast": bytes,
         },
         ...
     ],
@@ -77,18 +81,18 @@ def _bin_frames_to_seconds(
     return out.astype(np.float32)
 
 
-def _bin_chroma_to_seconds(
-    chroma: np.ndarray, bins: np.ndarray, n_seconds: int
+def _bin_multidim_to_seconds(
+    mat: np.ndarray, bins: np.ndarray, n_seconds: int
 ) -> np.ndarray:
-    """Vectorized average of 12-dim chroma frames into 1-second bins.
+    """Vectorized average of (D, n_frames) feature matrix into (n_seconds, D).
 
-    chroma: (12, n_frames)
-    Returns (n_seconds, 12) float32
+    Works for chroma (12,), MFCCs (13,), spectral contrast (7,), etc.
     """
+    d = mat.shape[0]
     counts = np.bincount(bins, minlength=n_seconds).astype(np.float64)
-    out = np.zeros((n_seconds, 12), dtype=np.float32)
-    for k in range(12):
-        sums = np.bincount(bins, weights=chroma[k].astype(np.float64), minlength=n_seconds)
+    out = np.zeros((n_seconds, d), dtype=np.float32)
+    for k in range(d):
+        sums = np.bincount(bins, weights=mat[k].astype(np.float64), minlength=n_seconds)
         with np.errstate(invalid="ignore"):
             out[:, k] = np.where(counts > 0, sums / counts, 0.0)
     return out
@@ -130,6 +134,13 @@ def compute_features(task: dict) -> dict:
     rms_chunks: list[np.ndarray] = []
     sc_chunks: list[np.ndarray] = []
     chroma_chunks: list[np.ndarray] = []
+    mfcc_chunks: list[np.ndarray] = []
+    sbw_chunks: list[np.ndarray] = []
+    sf_chunks: list[np.ndarray] = []
+    sr_chunks: list[np.ndarray] = []
+    zcr_chunks: list[np.ndarray] = []
+    onset_chunks: list[np.ndarray] = []
+    scontrast_chunks: list[np.ndarray] = []
 
     hp_sos: np.ndarray | None = None
     hp_zi: np.ndarray | None = None
@@ -152,20 +163,48 @@ def compute_features(task: dict) -> dict:
                 y_chunk = librosa.resample(y_chunk, orig_sr=native_sr, target_sr=SR)
 
             n_chunk_seconds = max(1, int(np.ceil(len(y_chunk) / SR)))
-            rms_f = librosa.feature.rms(y=y_chunk, hop_length=HOP_LENGTH)[0]
-            sc_f = librosa.feature.spectral_centroid(y=y_chunk, sr=SR, hop_length=HOP_LENGTH)[0]
-            chroma_f = librosa.feature.chroma_stft(y=y_chunk, sr=SR, hop_length=HOP_LENGTH, tuning=0.0)
+
+            S = np.abs(librosa.stft(y_chunk, hop_length=HOP_LENGTH))
+
+            rms_f = librosa.feature.rms(S=S, hop_length=HOP_LENGTH)[0]
+            sc_f = librosa.feature.spectral_centroid(S=S, sr=SR, hop_length=HOP_LENGTH)[0]
+            chroma_f = librosa.feature.chroma_stft(S=S, sr=SR, hop_length=HOP_LENGTH, tuning=0.0)
+            mfcc_f = librosa.feature.mfcc(S=librosa.power_to_db(S**2), sr=SR, n_mfcc=13)
+            sbw_f = librosa.feature.spectral_bandwidth(S=S, sr=SR, hop_length=HOP_LENGTH)[0]
+            sf_f = librosa.feature.spectral_flatness(S=S, hop_length=HOP_LENGTH)[0]
+            sr_f = librosa.feature.spectral_rolloff(S=S, sr=SR, hop_length=HOP_LENGTH)[0]
+            zcr_f = librosa.feature.zero_crossing_rate(y_chunk, hop_length=HOP_LENGTH)[0]
+            onset_f = librosa.onset.onset_strength(S=librosa.power_to_db(S**2), sr=SR, hop_length=HOP_LENGTH)
+            scontrast_f = librosa.feature.spectral_contrast(S=S, sr=SR, hop_length=HOP_LENGTH)
 
             frame_times = librosa.frames_to_time(np.arange(len(rms_f)), sr=SR, hop_length=HOP_LENGTH)
             bins = np.clip(np.floor(frame_times).astype(int), 0, n_chunk_seconds - 1)
 
             rms_chunks.append(_bin_frames_to_seconds(rms_f, bins, n_chunk_seconds))
             sc_chunks.append(_bin_frames_to_seconds(sc_f, bins, n_chunk_seconds))
-            chroma_chunks.append(_bin_chroma_to_seconds(chroma_f, bins, n_chunk_seconds))
+            chroma_chunks.append(_bin_multidim_to_seconds(chroma_f, bins, n_chunk_seconds))
+            mfcc_chunks.append(_bin_multidim_to_seconds(mfcc_f, bins, n_chunk_seconds))
+            sbw_chunks.append(_bin_frames_to_seconds(sbw_f, bins, n_chunk_seconds))
+            sf_chunks.append(_bin_frames_to_seconds(sf_f, bins, n_chunk_seconds))
+            sr_chunks.append(_bin_frames_to_seconds(sr_f, bins, n_chunk_seconds))
+            zcr_chunks.append(_bin_frames_to_seconds(zcr_f, bins, n_chunk_seconds))
+
+            onset_times = librosa.frames_to_time(np.arange(len(onset_f)), sr=SR, hop_length=HOP_LENGTH)
+            onset_bins = np.clip(np.floor(onset_times).astype(int), 0, n_chunk_seconds - 1)
+            onset_chunks.append(_bin_frames_to_seconds(onset_f, onset_bins, n_chunk_seconds))
+
+            scontrast_chunks.append(_bin_multidim_to_seconds(scontrast_f, bins, n_chunk_seconds))
 
     rms_s = np.concatenate(rms_chunks)
     sc_s = np.concatenate(sc_chunks)
     chroma_s = np.concatenate(chroma_chunks, axis=0)
+    mfcc_s = np.concatenate(mfcc_chunks, axis=0)
+    sbw_s = np.concatenate(sbw_chunks)
+    sf_s = np.concatenate(sf_chunks)
+    sr_s = np.concatenate(sr_chunks)
+    zcr_s = np.concatenate(zcr_chunks)
+    onset_s = np.concatenate(onset_chunks)
+    scontrast_s = np.concatenate(scontrast_chunks, axis=0)
     n_seconds = len(rms_s)
 
     segment_stats = []
@@ -173,11 +212,23 @@ def compute_features(task: dict) -> dict:
         start_i = int(start_sec)
         end_i = min(int(np.ceil(end_sec)), n_seconds)
         seg_rms = rms_s[start_i:end_i]
-        seg_sc = sc_s[start_i:end_i]
-        seg_chroma = chroma_s[start_i:end_i]
-
         if len(seg_rms) == 0:
             continue
+
+        seg_sc = sc_s[start_i:end_i]
+        seg_chroma = chroma_s[start_i:end_i]
+        seg_mfcc = mfcc_s[start_i:end_i]
+        seg_sbw = sbw_s[start_i:end_i]
+        seg_sf = sf_s[start_i:end_i]
+        seg_sr = sr_s[start_i:end_i]
+        seg_zcr = zcr_s[start_i:end_i]
+        seg_onset = onset_s[start_i:end_i]
+        seg_scontrast = scontrast_s[start_i:end_i]
+
+        threshold = float(seg_onset.mean() + 0.5 * seg_onset.std()) if seg_onset.std() > 0 else float(seg_onset.mean())
+        n_onsets = int(np.sum(seg_onset > threshold))
+        seg_dur = end_sec - start_sec
+        onset_density_val = n_onsets / seg_dur if seg_dur > 0 else 0.0
 
         segment_stats.append({
             "id": seg_id,
@@ -187,6 +238,19 @@ def compute_features(task: dict) -> dict:
             "var_spectral_centroid": float(seg_sc.var()),
             "mean_chroma": _pack_f32(seg_chroma.mean(axis=0)),
             "var_chroma": _pack_f32(seg_chroma.var(axis=0)),
+            "mean_mfcc": _pack_f32(seg_mfcc.mean(axis=0)),
+            "var_mfcc": _pack_f32(seg_mfcc.var(axis=0)),
+            "mean_spectral_bandwidth": float(seg_sbw.mean()),
+            "var_spectral_bandwidth": float(seg_sbw.var()),
+            "mean_spectral_flatness": float(seg_sf.mean()),
+            "var_spectral_flatness": float(seg_sf.var()),
+            "mean_spectral_rolloff": float(seg_sr.mean()),
+            "var_spectral_rolloff": float(seg_sr.var()),
+            "mean_zcr": float(seg_zcr.mean()),
+            "var_zcr": float(seg_zcr.var()),
+            "onset_density": onset_density_val,
+            "mean_spectral_contrast": _pack_f32(seg_scontrast.mean(axis=0)),
+            "var_spectral_contrast": _pack_f32(seg_scontrast.var(axis=0)),
         })
 
     return {
@@ -237,3 +301,16 @@ def write_features(
         seg.var_spectral_centroid = stats["var_spectral_centroid"]
         seg.mean_chroma = stats["mean_chroma"]
         seg.var_chroma = stats["var_chroma"]
+        seg.mean_mfcc = stats.get("mean_mfcc")
+        seg.var_mfcc = stats.get("var_mfcc")
+        seg.mean_spectral_bandwidth = stats.get("mean_spectral_bandwidth")
+        seg.var_spectral_bandwidth = stats.get("var_spectral_bandwidth")
+        seg.mean_spectral_flatness = stats.get("mean_spectral_flatness")
+        seg.var_spectral_flatness = stats.get("var_spectral_flatness")
+        seg.mean_spectral_rolloff = stats.get("mean_spectral_rolloff")
+        seg.var_spectral_rolloff = stats.get("var_spectral_rolloff")
+        seg.mean_zcr = stats.get("mean_zcr")
+        seg.var_zcr = stats.get("var_zcr")
+        seg.onset_density = stats.get("onset_density")
+        seg.mean_spectral_contrast = stats.get("mean_spectral_contrast")
+        seg.var_spectral_contrast = stats.get("var_spectral_contrast")

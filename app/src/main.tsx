@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "./index.css";
 import { Layout } from "./components/Layout";
 import { Jams } from "./pages/Jams";
+import { LabelPassages } from "./pages/LabelPassages";
 import { MoodMap } from "./pages/MoodMap";
 import { Passages } from "./pages/Passages";
 import { Review } from "./pages/Review";
@@ -20,6 +21,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="jams" element={<Jams />} />
           <Route path="sessions" element={<Sessions />} />
           <Route path="passages" element={<Passages />} />
+          <Route path="label-passages" element={<LabelPassages />} />
           <Route path="review" element={<Review />} />
           <Route path="mood-map">
             <Route index element={<Navigate to="segments" replace />} />

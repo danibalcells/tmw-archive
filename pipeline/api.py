@@ -935,6 +935,80 @@ def get_passages_by_recording(run: str, recording_id: int):
     )
 
 
+@app.get("/api/passages/{run}/sample")
+def sample_passages(run: str, n: int = 100, seed: int = 42):
+    if not _valid_run_name(run):
+        raise HTTPException(status_code=400, detail="Invalid run name.")
+    passages_path = PASSAGES_BASE_DIR / run / "passages.json"
+    if not passages_path.exists():
+        raise HTTPException(status_code=404, detail=f"No passages for run '{run}'.")
+    passages = json.loads(passages_path.read_text())
+    if len(passages) <= n:
+        return passages
+    import random as _rnd
+    rng = _rnd.Random(seed)
+    by_type: dict[int, list] = {}
+    for p in passages:
+        by_type.setdefault(p["passage_type"], []).append(p)
+    sampled: list = []
+    types = sorted(by_type.keys())
+    per_type = max(1, n // len(types)) if types else n
+    for tid in types:
+        group = by_type[tid]
+        rng.shuffle(group)
+        sampled.extend(group[:per_type])
+    rng.shuffle(sampled)
+    return sampled[:n]
+
+
+LABEL_SETS_DIR = PASSAGES_BASE_DIR / "label-sets"
+
+
+@app.get("/api/label-sets")
+def list_label_sets():
+    if not LABEL_SETS_DIR.exists():
+        return []
+    return [
+        json.loads(f.read_text())
+        for f in sorted(LABEL_SETS_DIR.glob("*.json"))
+    ]
+
+
+@app.get("/api/label-sets/{name}")
+def get_label_set(name: str):
+    if not name.replace("-", "").replace("_", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid label set name.")
+    path = LABEL_SETS_DIR / f"{name}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Label set '{name}' not found.")
+    return json.loads(path.read_text())
+
+
+class LabelSetPayload(BaseModel):
+    name: str
+    run: str
+    groups: list[str]
+    labels: dict[str, str]
+
+
+@app.post("/api/label-sets")
+def save_label_set(payload: LabelSetPayload):
+    safe_name = payload.name.strip().replace(" ", "-")
+    if not safe_name.replace("-", "").replace("_", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid label set name.")
+    LABEL_SETS_DIR.mkdir(parents=True, exist_ok=True)
+    data = {
+        "name": payload.name,
+        "run": payload.run,
+        "groups": payload.groups,
+        "labels": payload.labels,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    path = LABEL_SETS_DIR / f"{safe_name}.json"
+    path.write_text(json.dumps(data, indent=2))
+    return data
+
+
 @app.get("/api/audio/{recording_id}")
 def serve_audio(recording_id: int, db: Session = Depends(get_session)) -> FileResponse:
     rec = db.query(Recording).filter(Recording.id == recording_id).first()

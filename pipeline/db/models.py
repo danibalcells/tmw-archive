@@ -159,12 +159,26 @@ class Segment(Base):
     start_seconds: Mapped[float] = mapped_column(Float, nullable=False)
     end_seconds: Mapped[float] = mapped_column(Float, nullable=False)
     clap_embedding: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
+    mert_embedding: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
     mean_rms: Mapped[Optional[float]] = mapped_column(Float)
     var_rms: Mapped[Optional[float]] = mapped_column(Float)
     mean_spectral_centroid: Mapped[Optional[float]] = mapped_column(Float)
     var_spectral_centroid: Mapped[Optional[float]] = mapped_column(Float)
     mean_chroma: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
     var_chroma: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
+    mean_mfcc: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
+    var_mfcc: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
+    mean_spectral_bandwidth: Mapped[Optional[float]] = mapped_column(Float)
+    var_spectral_bandwidth: Mapped[Optional[float]] = mapped_column(Float)
+    mean_spectral_flatness: Mapped[Optional[float]] = mapped_column(Float)
+    var_spectral_flatness: Mapped[Optional[float]] = mapped_column(Float)
+    mean_spectral_rolloff: Mapped[Optional[float]] = mapped_column(Float)
+    var_spectral_rolloff: Mapped[Optional[float]] = mapped_column(Float)
+    mean_zcr: Mapped[Optional[float]] = mapped_column(Float)
+    var_zcr: Mapped[Optional[float]] = mapped_column(Float)
+    onset_density: Mapped[Optional[float]] = mapped_column(Float)
+    mean_spectral_contrast: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
+    var_spectral_contrast: Mapped[Optional[bytes]] = mapped_column(LargeBinary)
 
     recording: Mapped["Recording"] = relationship(back_populates="segments")
 
@@ -208,7 +222,7 @@ class ProcessingLog(Base):
     __tablename__ = "processing_log"
     __table_args__ = (
         CheckConstraint(
-            "step IN ('ingest', 'librosa', 'clap', 'coverhunter')",
+            "step IN ('ingest', 'librosa', 'clap', 'coverhunter', 'mert')",
             name="ck_processing_log_step",
         ),
         CheckConstraint(

@@ -314,6 +314,30 @@ export async function fetchPassagesByRecording(run: string, recordingId: number)
   return apiFetch<Passage[]>(`/api/passages/${run}/recording/${recordingId}`, []);
 }
 
+export async function fetchPassageSample(run: string, n: number = 100, seed: number = 42): Promise<Passage[]> {
+  return apiFetch<Passage[]>(`/api/passages/${run}/sample?n=${n}&seed=${seed}`, []);
+}
+
+export interface LabelSet {
+  name: string;
+  run: string;
+  groups: string[];
+  labels: Record<string, string>;
+  created_at?: string;
+}
+
+export async function fetchLabelSets(): Promise<LabelSet[]> {
+  return apiFetch<LabelSet[]>("/api/label-sets", []);
+}
+
+export async function fetchLabelSet(name: string): Promise<LabelSet | null> {
+  return apiFetch<LabelSet | null>(`/api/label-sets/${name}`, null);
+}
+
+export async function saveLabelSet(data: { name: string; run: string; groups: string[]; labels: Record<string, string> }): Promise<LabelSet> {
+  return apiPost<LabelSet>("/api/label-sets", data);
+}
+
 export interface SplitResult {
   actual_split_at: number;
   recordings: [ReviewRecording, ReviewRecording];
