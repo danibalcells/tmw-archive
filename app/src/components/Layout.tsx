@@ -8,6 +8,7 @@ const NAV = [
   { to: "/sessions", label: "Sessions" },
   { to: "/passages", label: "Passages" },
   { to: "/label-passages", label: "Label" },
+  { to: "/endless-rehearsal", label: "Endless" },
   { to: "/mood-map/segments", label: "Segment Map" },
   { to: "/mood-map/passages", label: "Passage Map" },
   { to: "/review", label: "Review" },

@@ -346,3 +346,73 @@ export interface SplitResult {
 export async function splitRecording(id: number, splitAt: number): Promise<SplitResult> {
   return apiPost<SplitResult>(`/api/recordings/${id}/split`, { split_at: splitAt });
 }
+
+// ---------------------------------------------------------------------------
+// Endless Rehearsal
+// ---------------------------------------------------------------------------
+
+export interface ERPassage {
+  passage_id: number;
+  passage_type: number;
+  recording_id: number;
+  start_seconds: number;
+  end_seconds: number;
+  duration: number;
+  segment_count: number;
+  mean_rms: number | null;
+  mean_spectral_centroid: number | null;
+  recording_title: string | null;
+  audio_path: string | null;
+  session_date: string | null;
+  song_title: string | null;
+  effective_type: string | null;
+}
+
+export interface ERCandidate {
+  passage: ERPassage;
+  score: number;
+  boundary_similarity: number;
+  recency_factor: number;
+  fidelity_bonus: number;
+  energy_continuity: number;
+}
+
+export interface ERSelection {
+  session_id: string;
+  step: number;
+  passage: ERPassage;
+  target_state: number;
+  state_distribution: number[];
+  state_history: number[];
+  candidates: ERCandidate[];
+}
+
+export interface ERPersonality {
+  name: string;
+  temperature: number;
+  fidelity_weight: number;
+  boundary_weight: number;
+  energy_weight: number;
+  recency_halflife: number;
+}
+
+export async function fetchERPersonalities(): Promise<ERPersonality[]> {
+  return apiFetch<ERPersonality[]>("/api/endless-rehearsal/personalities", []);
+}
+
+export async function startERSession(
+  run: string,
+  personality: string,
+  jamOnly: boolean = true,
+  seed?: number
+): Promise<ERSelection> {
+  const qs = new URLSearchParams({ run, personality, jam_only: String(jamOnly) });
+  if (seed !== undefined) qs.set("seed", String(seed));
+  const res = await fetch(`/api/endless-rehearsal/sessions?${qs}`, { method: "POST" });
+  if (!res.ok) throw new Error(`Failed to start session: ${res.status}`);
+  return res.json() as Promise<ERSelection>;
+}
+
+export async function advanceERSession(sessionId: string): Promise<ERSelection> {
+  return apiPost<ERSelection>(`/api/endless-rehearsal/sessions/${sessionId}/next`);
+}

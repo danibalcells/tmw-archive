@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "./index.css";
 import { Layout } from "./components/Layout";
+import { EndlessRehearsal } from "./pages/EndlessRehearsal";
 import { Jams } from "./pages/Jams";
 import { LabelPassages } from "./pages/LabelPassages";
 import { MoodMap } from "./pages/MoodMap";
@@ -22,6 +23,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="sessions" element={<Sessions />} />
           <Route path="passages" element={<Passages />} />
           <Route path="label-passages" element={<LabelPassages />} />
+          <Route path="endless-rehearsal" element={<EndlessRehearsal />} />
           <Route path="review" element={<Review />} />
           <Route path="mood-map">
             <Route index element={<Navigate to="segments" replace />} />

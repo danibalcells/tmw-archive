@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import subprocess
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -1007,6 +1008,142 @@ def save_label_set(payload: LabelSetPayload):
     path = LABEL_SETS_DIR / f"{safe_name}.json"
     path.write_text(json.dumps(data, indent=2))
     return data
+
+
+# ---------------------------------------------------------------------------
+# Endless Rehearsal
+# ---------------------------------------------------------------------------
+
+from pipeline.generation import (  # noqa: E402
+    GenerationSession,
+    NGramTransitionModel,
+    PassageStore,
+    get_preset,
+)
+
+_er_store_cache: dict[str, PassageStore] = {}
+_er_model_cache: dict[str, NGramTransitionModel] = {}
+_er_sessions: dict[str, GenerationSession] = {}
+
+
+def _er_cache_key(run: str, jam_only: bool) -> str:
+    return f"{run}:{'jam' if jam_only else 'all'}"
+
+
+def _get_er_store(run: str, jam_only: bool) -> PassageStore:
+    key = _er_cache_key(run, jam_only)
+    if key not in _er_store_cache:
+        run_dir = PASSAGES_BASE_DIR / run
+        if not run_dir.is_dir():
+            raise HTTPException(status_code=404, detail=f"Passage run '{run}' not found.")
+        effective_types = {"jam"} if jam_only else None
+        _er_store_cache[key] = PassageStore(run_dir, effective_types)
+    return _er_store_cache[key]
+
+
+def _get_er_model(run: str, jam_only: bool) -> NGramTransitionModel:
+    key = _er_cache_key(run, jam_only)
+    if key not in _er_model_cache:
+        store = _get_er_store(run, jam_only)
+        model = NGramTransitionModel(max_order=3)
+        seqs = [[p.passage_type for p in s] for s in store.recording_sequences()]
+        model.train(seqs, store.n_states)
+        _er_model_cache[key] = model
+    return _er_model_cache[key]
+
+
+def _passage_to_dict(p) -> dict:
+    return {
+        "passage_id": p.passage_id,
+        "passage_type": p.passage_type,
+        "recording_id": p.recording_id,
+        "start_seconds": p.start_seconds,
+        "end_seconds": p.end_seconds,
+        "duration": p.duration,
+        "segment_count": p.segment_count,
+        "mean_rms": p.mean_rms,
+        "mean_spectral_centroid": p.mean_spectral_centroid,
+        "recording_title": p.recording_title,
+        "audio_path": p.audio_path,
+        "session_date": p.session_date,
+        "song_title": p.song_title,
+        "effective_type": p.effective_type,
+    }
+
+
+def _selection_to_dict(sel) -> dict:
+    return {
+        "session_id": sel.session_id,
+        "step": sel.step,
+        "passage": _passage_to_dict(sel.passage),
+        "target_state": sel.target_state,
+        "state_distribution": [round(v, 4) for v in sel.state_distribution],
+        "state_history": sel.state_history,
+        "candidates": [
+            {
+                "passage": _passage_to_dict(c.passage),
+                "score": round(c.score, 4),
+                "boundary_similarity": round(c.boundary_similarity, 4),
+                "recency_factor": round(c.recency_factor, 4),
+                "fidelity_bonus": round(c.fidelity_bonus, 4),
+                "energy_continuity": round(c.energy_continuity, 4),
+            }
+            for c in sel.candidates
+        ],
+    }
+
+
+@app.get("/api/endless-rehearsal/personalities")
+def list_personalities():
+    from pipeline.generation import PRESETS
+    return [
+        {
+            "name": p.name,
+            "temperature": p.temperature,
+            "fidelity_weight": p.fidelity_weight,
+            "boundary_weight": p.boundary_weight,
+            "energy_weight": p.energy_weight,
+            "recency_halflife": p.recency_halflife,
+        }
+        for p in PRESETS.values()
+    ]
+
+
+@app.post("/api/endless-rehearsal/sessions")
+def create_er_session(
+    run: str,
+    personality: str = "explorer",
+    jam_only: bool = True,
+    seed: Optional[int] = None,
+):
+    if not _valid_run_name(run):
+        raise HTTPException(status_code=400, detail="Invalid run name.")
+    try:
+        config = get_preset(personality)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    store = _get_er_store(run, jam_only)
+    model = _get_er_model(run, jam_only)
+
+    if store.n_states == 0:
+        raise HTTPException(status_code=422, detail="No passages found for given filters.")
+
+    session_id = str(uuid.uuid4())
+    session = GenerationSession(session_id, store, model, config, seed=seed)
+    _er_sessions[session_id] = session
+
+    sel = session.next()
+    return _selection_to_dict(sel)
+
+
+@app.post("/api/endless-rehearsal/sessions/{session_id}/next")
+def advance_er_session(session_id: str):
+    session = _er_sessions.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    sel = session.next()
+    return _selection_to_dict(sel)
 
 
 @app.get("/api/audio/{recording_id}")
